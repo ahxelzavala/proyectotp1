@@ -34,7 +34,7 @@ const LoginRegister = () => {
               <input type="checkbox" />
               Recuerdame
             </label>
-            <a href="#">¿Has olvidado tu contraseña?</a>
+            <a href="#">¿Has olvidado tu contraseñaaa?</a>
           </div>
           <button type="submit">Iniciar Sesión</button>
           <div className="register-link">
