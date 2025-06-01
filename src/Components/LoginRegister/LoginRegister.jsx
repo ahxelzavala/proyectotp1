@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import './LoginRegister.css';
 import { FaUser, FaLock, FaEnvelope } from "react-icons/fa";
 
-const LoginRegister = () => {
+const LoginRegister = ({ onLoginSuccess }) => {
   const [action, setAction] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const registerLink = (e) => {
     e.preventDefault();
@@ -15,18 +17,38 @@ const LoginRegister = () => {
     setAction('');
   };
 
+  const handleLogin = (e) => {
+    e.preventDefault();
+    // Aquí iría la validación real de las credenciales
+    if (email && password) {
+      onLoginSuccess();
+    }
+  };
+
   return (
     <div className={`wrapper ${action}`}>
       {/* -- Login -- */}
       <div className="form-box login">
-        <form action="">
+        <form onSubmit={handleLogin}>
           <h1>ANDERS</h1>
           <div className="input-box">
-            <input type="text" placeholder='Introduce tu e-mail' required />
+            <input 
+              type="text" 
+              placeholder='Introduce tu e-mail' 
+              required 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
             <FaUser className='icon' />
           </div>
           <div className="input-box">
-            <input type="password" placeholder='Contraseña' required />
+            <input 
+              type="password" 
+              placeholder='Contraseña' 
+              required 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
             <FaLock className='icon' />
           </div>
           <div className="remember-forgot">
@@ -34,7 +56,7 @@ const LoginRegister = () => {
               <input type="checkbox" />
               Recuerdame
             </label>
-            <a href="#">¿Has olvidado tu contraseñaaa?</a>
+            <a href="#">¿Has olvidado tu contraseña?</a>
           </div>
           <button type="submit">Iniciar Sesión</button>
           <div className="register-link">
