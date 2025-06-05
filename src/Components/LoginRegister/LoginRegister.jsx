@@ -6,22 +6,45 @@ const LoginRegister = ({ onLoginSuccess }) => {
   const [action, setAction] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   const registerLink = (e) => {
     e.preventDefault();
     setAction('active');
+    setError('');
   };
 
   const loginLink = (e) => {
     e.preventDefault();
     setAction('');
+    setError('');
   };
 
   const handleLogin = (e) => {
     e.preventDefault();
-    // Aquí iría la validación real de las credenciales
-    if (email && password) {
-      onLoginSuccess();
+    setError('');
+
+    const users = {
+      admin: {
+        email: 'admin@anders.com',
+        password: 'contra123',
+        role: 'admin'
+      },
+      user: {
+        email: 'user@anders.com',
+        password: 'contra456',
+        role: 'user'
+      }
+    };
+
+    const foundUser = Object.values(users).find(
+      user => user.email === email && user.password === password
+    );
+
+    if (foundUser) {
+      onLoginSuccess(foundUser.role);
+    } else {
+      setError('Credenciales incorrectas');
     }
   };
 
@@ -31,6 +54,7 @@ const LoginRegister = ({ onLoginSuccess }) => {
       <div className="form-box login">
         <form onSubmit={handleLogin}>
           <h1>ANDERS</h1>
+          {error && <div className="error-message">{error}</div>}
           <div className="input-box">
             <input 
               type="text" 

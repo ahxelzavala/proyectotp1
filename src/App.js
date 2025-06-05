@@ -6,11 +6,19 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState(null);
   const navigate = useNavigate();
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = (role) => {
     setIsLoggedIn(true);
+    setUserRole(role);
     navigate('/dashboard');
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setUserRole(null);
+    navigate('/');
   };
 
   return (
@@ -20,7 +28,7 @@ function App() {
           isLoggedIn ? <Navigate to="/dashboard" /> : <LoginRegister onLoginSuccess={handleLoginSuccess} />
         } />
         <Route path="/dashboard" element={
-          isLoggedIn ? <Dashboard /> : <Navigate to="/" />
+          isLoggedIn ? <Dashboard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" />
         } />
       </Routes>
     </div>

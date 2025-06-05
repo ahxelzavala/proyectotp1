@@ -1,70 +1,79 @@
-# Getting Started with Create React App
+# Anders Dashboard
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Este proyecto incluye un dashboard administrativo con sistema de roles y gestión de analistas.
 
-## Available Scripts
+## Estructura del Proyecto
 
-In the project directory, you can run:
+```
+proyectotp1/
+├── backend/
+│   ├── main.py
+│   ├── config.py
+│   ├── requirements.txt
+│   └── .env.example
+└── src/
+    └── Components/
+        ├── Dashboard/
+        └── LoginRegister/
+```
 
-### `npm start`
+## Configuración del Backend
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+1. Crear un entorno virtual e instalar dependencias:
+```bash
+python -m venv venv
+.\venv\Scripts\activate  # En Windows
+source venv/bin/activate  # En Unix/MacOS
+pip install -r backend/requirements.txt
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+2. Configurar variables de entorno:
+```bash
+cd backend
+cp .env.example .env
+```
+Editar el archivo `.env` con tus credenciales de correo.
 
-### `npm test`
+3. Iniciar el servidor:
+```bash
+uvicorn main:app --reload
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Configuración del Frontend
 
-### `npm run build`
+1. Instalar dependencias:
+```bash
+npm install
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+2. Iniciar el servidor de desarrollo:
+```bash
+npm start
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Credenciales de Acceso
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Administrador
+- Email: admin@anders.com
+- Contraseña: contra123
 
-### `npm run eject`
+### Usuario
+- Email: user@anders.com
+- Contraseña: contra456
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Funcionalidades
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### Administrador
+- Acceso a todas las secciones del dashboard
+- Gestión de analistas en la sección de Configuración
+- Puede agregar correos de analistas (solo dominio @anders.com)
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### Usuario
+- Acceso a Inicio, Clientes, Productos y Análisis
+- Sin acceso a la sección de Configuración
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### Registro de Nuevos Usuarios
+1. El administrador debe agregar el correo del analista en la sección de Configuración
+2. El analista puede registrarse usando el correo autorizado
+3. Se enviará un correo de confirmación
+4. Tras confirmar, el usuario puede iniciar sesión

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './Dashboard.css';
 import Sidebar from './Sidebar';
+import Configuration from './Configuration';
 
-const Dashboard = () => {
+const Dashboard = ({ userRole, onLogout }) => {
   const clientData = [
     { id: 1, name: 'Cliente1', value: '1658.00' },
     { id: 2, name: 'Cliente2', value: '1658.00' },
@@ -18,9 +19,14 @@ const Dashboard = () => {
     { id: 5, name: 'Producto5', value: '1658.00', description: 'Descripción' }
   ];
 
-  return (
-    <div className="dashboard-layout">
-      <Sidebar />
+  const [currentSection, setCurrentSection] = useState('inicio');
+
+  const renderContent = () => {
+    if (userRole === 'admin' && currentSection === 'configuracion') {
+      return <Configuration />;
+    }
+
+    return (
       <div className="dashboard-content">
         <h1>Análisis de cliente</h1>
         
@@ -70,6 +76,18 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="dashboard-layout">
+      <Sidebar 
+        userRole={userRole} 
+        onLogout={onLogout} 
+        onSectionChange={setCurrentSection} 
+        currentSection={currentSection}
+      />
+      {renderContent()}
     </div>
   );
 };
