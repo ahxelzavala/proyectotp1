@@ -1,5 +1,22 @@
+/* Reset global para eliminar márgenes y espacios */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-x: hidden; /* Evita scroll horizontal */
+}
+
 .App {
   text-align: center;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden; /* Evita scroll en el contenedor principal */
 }
 
 .App-logo {
