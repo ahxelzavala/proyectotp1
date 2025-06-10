@@ -4,9 +4,12 @@
   background-color: #0a2472;
   color: white;
   padding: 20px;
-  position: fixed;
-  left: 0;
-  top: 0;
+  position: relative;
+  flex-shrink: 0; /* Evita que se encoja */
+  z-index: 1000;
+  transition: transform 0.3s ease;
+  box-sizing: border-box;
+  margin: 0; /* Agregado para eliminar márgenes */
 }
 
 .logo {
@@ -56,4 +59,36 @@
 
 .nav-item span {
   font-size: 16px;
+}
+
+/* Responsive Design para Sidebar */
+@media (max-width: 1023px) {
+  .sidebar {
+    transform: translateX(-100%);
+    /* El sidebar se oculta en pantallas pequeñas */
+    /* Puedes agregar un botón toggle más adelante si lo necesitas */
+  }
+  
+  .sidebar.open {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    padding: 15px;
+  }
+  
+  .logo h2 {
+    font-size: 20px;
+  }
+  
+  .nav-item {
+    padding: 12px 15px;
+  }
+  
+  .nav-item span {
+    font-size: 14px;
+  }
 }

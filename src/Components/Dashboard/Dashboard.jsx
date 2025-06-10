@@ -21,14 +21,18 @@ const Dashboard = ({ userRole, onLogout }) => {
 
   const [currentSection, setCurrentSection] = useState('inicio');
 
-  const renderContent = () => {
+  const renderMainContent = () => {
     if (userRole === 'admin' && currentSection === 'configuracion') {
-      return <Configuration />;
+      return (
+        <div className="configuration-wrapper">
+          <Configuration />
+        </div>
+      );
     }
 
     return (
-      <div className="dashboard-content">
-        <h1>Análisis de cliente</h1>
+      <>
+        <h1 className="titulo">Análisis de cliente</h1>
         
         <div className="dashboard-grid">
           <div className="card">
@@ -75,7 +79,7 @@ const Dashboard = ({ userRole, onLogout }) => {
             </div>
           </div>
         </div>
-      </div>
+      </>
     );
   };
 
@@ -87,7 +91,9 @@ const Dashboard = ({ userRole, onLogout }) => {
         onSectionChange={setCurrentSection} 
         currentSection={currentSection}
       />
-      {renderContent()}
+      <div className="dashboard-content">
+        {renderMainContent()}
+      </div>
     </div>
   );
 };
