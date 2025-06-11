@@ -23,7 +23,6 @@ class ClientData(Base):
     value = Column(Float, default=0.0)
     date = Column(DateTime, default=datetime.utcnow)
     description = Column(Text, nullable=True)
-    category = Column(String, default="General")  # Nueva columna para categoría
 
 # Modelo para emails autorizados
 class AuthorizedEmail(Base):
