@@ -13,7 +13,7 @@ const Configuration = () => {
 
   const fetchAnalysts = async () => {
     try {
-      const response = await fetch('http://localhost:8000/analysts');
+      const response = await fetch('http://localhost:8000/authorized-emails');
       const data = await response.json();
       setAnalysts(data);
     } catch (error) {
@@ -32,7 +32,7 @@ const Configuration = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/analysts', {
+      const response = await fetch('http://localhost:8000/authorized-emails', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,8 +76,8 @@ const Configuration = () => {
         <h3>Analistas Registrados</h3>
         {analysts.length > 0 ? (
           <ul>
-            {analysts.map((email, index) => (
-              <li key={index}>{email}</li>
+            {analysts.map((analyst) => (
+              <li key={analyst.id}>{analyst.email}</li>
             ))}
           </ul>
         ) : (

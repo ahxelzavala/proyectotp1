@@ -128,4 +128,3 @@ const LoginRegister = ({ onLoginSuccess }) => {
 };
 
 export default LoginRegister;
-

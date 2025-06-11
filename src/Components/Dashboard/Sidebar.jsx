@@ -16,7 +16,7 @@ const Sidebar = ({ userRole, onLogout, onSectionChange, currentSection }) => {
     if (item.onClick) {
       item.onClick();
     } else {
-      onSectionChange(item.id);
+      onSectionChange(item.id);  // Cambiar la sección activa
     }
   };
 
@@ -29,12 +29,12 @@ const Sidebar = ({ userRole, onLogout, onSectionChange, currentSection }) => {
       <nav className="nav-menu">
         <ul>
           {menuItems
-            .filter(item => item.showFor.includes(userRole))
+            .filter(item => item.showFor.includes(userRole))  // Filtrar según el rol de usuario
             .map((item) => (
               <li 
                 key={item.id} 
                 className={`nav-item ${currentSection === item.id ? 'active' : ''}`}
-                onClick={() => handleItemClick(item)}
+                onClick={() => handleItemClick(item)}  // Manejar el clic para cambiar la sección
                 style={{ cursor: 'pointer' }}
               >
                 <item.icon className="nav-icon" />
