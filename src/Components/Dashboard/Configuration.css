@@ -1,22 +1,56 @@
+/* Layout general para la página de configuración */
+.layout-container {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
 .configuration-container {
+  flex: 1;
   padding: 2rem;
-  max-width: 800px;
-  margin: 0 auto;
+  margin-left: 120px; /* Para que no quede tapado por el sidebar */
 }
 
-.configuration-container h2 {
+.configuration-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-title {
   color: #333;
+  font-size: 1.8rem;
   margin-bottom: 2rem;
+  font-weight: bold;
 }
 
-.analyst-form {
-  background: #fff;
-  padding: 2rem;
+/* Sección de tarjetas */
+.section-card {
+  background-color: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   margin-bottom: 2rem;
+  padding: 2rem;
 }
 
+/* Estilo para los encabezados de las secciones */
+.section-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.section-icon {
+  font-size: 1.5rem;
+  margin-right: 1rem;
+  color: #1a237e;
+}
+
+.section-header h2 {
+  font-size: 1.2rem;
+  color: #333;
+}
+
+/* Entrada para los analistas */
 .input-group {
   display: flex;
   gap: 1rem;
@@ -46,41 +80,68 @@
   background-color: #0d47a1;
 }
 
-.error-message {
-  color: #d32f2f;
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
+/* Tabla de analistas */
+.analysts-table {
+  width: 100%;
+  margin-top: 1rem;
 }
 
-.success-message {
-  color: #388e3c;
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.analysts-list {
-  background: #fff;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.analysts-list h3 {
-  color: #333;
+.table-header {
+  font-weight: bold;
+  display: grid;
+  grid-template-columns: 3fr 4fr 2fr 1fr;
   margin-bottom: 1rem;
 }
 
-.analysts-list ul {
-  list-style: none;
-  padding: 0;
-}
-
-.analysts-list li {
-  padding: 0.75rem;
-  border-bottom: 1px solid #eee;
+.analyst-row {
+  display: grid;
+  grid-template-columns: 3fr 4fr 2fr 1fr;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #ddd;
   color: #666;
 }
 
-.analysts-list li:last-child {
-  border-bottom: none;
+.analyst-status {
+  font-weight: bold;
+  text-transform: capitalize;
+}
+
+.analyst-status.activo {
+  color: green;
+}
+
+.analyst-status.inactivo {
+  color: red;
+}
+
+.analyst-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #1a237e;
+}
+
+.edit-btn:hover {
+  color: #0288d1;
+}
+
+.delete-btn:hover {
+  color: #d32f2f;
+}
+
+/* Fondo general */
+body {
+  background-color: #f5f5f5;
+}
+
+.empty-state {
+  padding: 1rem;
+  text-align: center;
+  color: #888;
+  font-style: italic;
 }

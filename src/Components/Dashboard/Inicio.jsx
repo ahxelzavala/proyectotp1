@@ -186,13 +186,7 @@ const Inicio = () => {
       {/* Sección de carga */}
       <div className="upload-section">
         <h3>📂 Importar Datos CSV</h3>
-        <div className="upload-info">
-          <p><strong>Formato requerido:</strong></p>
-          <div className="format-info">
-            <span className="required">Obligatorias:</span> client_name, product, value<br/>
-            <span className="optional">Opcionales:</span> client_type, executive, date, description
-          </div>
-        </div>
+        
         
         <div className="file-input-container">
           <input 
