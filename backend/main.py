@@ -2,7 +2,7 @@ from fastapi import FastAPI, File, UploadFile, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 import pandas as pd
 import io
 from typing import List, Dict, Any
@@ -11,57 +11,53 @@ import logging
 import traceback
 
 # Importar modelos y configuración
-from models import get_database, ClientData, AuthorizedEmail, create_tables, test_database_connection
+from models import get_database, ClientData, AuthorizedEmail, create_tables, test_database_connection, migrate_add_new_columns
 from config import settings
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Crear la aplicación FastAPI
 app = FastAPI(
     title="Sistema de Análisis Anders",
-    description="API para importar y analizar datos CSV",
-    version="1.0.0"
+    description="API para importar y analizar datos CSV completos",
+    version="2.0.0"
 )
 
-# Configurar CORS para permitir requests desde el frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, especifica dominios específicos
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Inicializar base de datos al arrancar la aplicación
 @app.on_event("startup")
 async def startup_event():
     """Inicializar la base de datos al arrancar"""
     logger.info("Iniciando aplicación...")
     
-    # Probar conexión
     if not test_database_connection():
         logger.error("❌ No se pudo conectar a la base de datos")
         raise Exception("Error de conexión a la base de datos")
     
-    # Crear tablas
     if not create_tables():
         logger.error("❌ No se pudieron crear las tablas")
         raise Exception("Error creando tablas de la base de datos")
+    
+    # Ejecutar migración para agregar nuevas columnas
+    if not migrate_add_new_columns():
+        logger.warning("⚠️ No se pudieron agregar todas las columnas nuevas")
     
     logger.info("✅ Base de datos inicializada correctamente")
 
 @app.get("/")
 async def root():
-    """Endpoint de bienvenida"""
-    return {"message": "Bienvenido al Sistema de Análisis Anders"}
+    return {"message": "Bienvenido al Sistema de Análisis Anders v2.0 - CSV Completo"}
 
 @app.get("/health")
 async def health_check():
-    """Verificar el estado del servidor"""
     try:
-        # Probar conexión a la base de datos
         db = next(get_database())
         db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "connected"}
@@ -72,23 +68,19 @@ async def health_check():
 @app.post("/upload-csv")
 async def upload_csv(
     file: UploadFile = File(...),
-    replace_data: bool = True,  # ✅ Nuevo parámetro para controlar si reemplazar datos
+    replace_data: bool = True,
     db: Session = Depends(get_database)
 ):
     """
-    Endpoint para cargar archivo CSV y guardarlo en la base de datos
+    Endpoint mejorado para cargar CSV con TODAS las columnas
     """
     try:
-        logger.info(f"Procesando archivo: {file.filename}")
+        logger.info(f"Procesando archivo completo: {file.filename}")
         
-        # Verificar que el archivo sea CSV
         if not file.filename.endswith('.csv'):
-            raise HTTPException(
-                status_code=400, 
-                detail="El archivo debe ser un CSV (.csv)"
-            )
+            raise HTTPException(status_code=400, detail="El archivo debe ser un CSV (.csv)")
         
-        # ✅ Si replace_data es True, limpiar datos existentes
+        # Limpiar datos anteriores si se solicita
         if replace_data:
             try:
                 deleted_count = db.query(ClientData).delete()
@@ -99,189 +91,129 @@ async def upload_csv(
                 logger.error(f"Error eliminando datos anteriores: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"Error limpiando datos anteriores: {str(e)}")
         
-        # Leer el contenido del archivo
+        # Leer el archivo
         contents = await file.read()
-        
-        # Crear un objeto StringIO para pandas
         csv_string = contents.decode('utf-8')
         csv_io = io.StringIO(csv_string)
         
-        # ✅ Leer el CSV con pandas con configuración mejorada
+        # Leer CSV
         try:
             df = pd.read_csv(
                 csv_io,
                 encoding='utf-8',
-                skipinitialspace=True,  # Eliminar espacios al inicio
-                na_values=['', 'NA', 'N/A', 'null', 'NULL', 'None', 'NONE'],  # Valores considerados como NaN
+                skipinitialspace=True,
+                na_values=['', 'NA', 'N/A', 'null', 'NULL', 'None', 'NONE'],
                 keep_default_na=True
             )
             logger.info(f"CSV leído exitosamente. Filas: {len(df)}, Columnas: {len(df.columns)}")
-            logger.info(f"Primeras 3 filas del CSV:\n{df.head(3)}")
+            logger.info(f"Columnas encontradas: {list(df.columns)}")
         except Exception as e:
             logger.error(f"Error leyendo CSV: {str(e)}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Error al leer el archivo CSV: {str(e)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Error al leer el archivo CSV: {str(e)}")
         
-        # Validar que el DataFrame no esté vacío
         if df.empty:
-            raise HTTPException(
-                status_code=400,
-                detail="El archivo CSV está vacío"
-            )
+            raise HTTPException(status_code=400, detail="El archivo CSV está vacío")
         
-        # ✅ Limpiar nombres de columnas más agresivamente
-        df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
-        logger.info(f"Columnas procesadas: {list(df.columns)}")
+        # Función para obtener valor de manera segura
+        def get_safe_value(row, column_name, convert_to=str, default=None):
+            """Obtener valor de columna de manera segura"""
+            if column_name in df.columns and not pd.isna(row[column_name]):
+                try:
+                    value = row[column_name]
+                    if convert_to == str:
+                        return str(value).strip() if str(value).strip() not in ['nan', 'None', 'null'] else default
+                    elif convert_to == float:
+                        # Limpiar valor numérico
+                        if isinstance(value, (int, float)):
+                            return float(value)
+                        else:
+                            value_str = str(value).replace(',', '').replace('$', '').replace('%', '').strip()
+                            import re
+                            value_str = re.sub(r'[^\d.-]', '', value_str)
+                            return float(value_str) if value_str else default
+                    elif convert_to == datetime:
+                        parsed_date = pd.to_datetime(value, errors='coerce')
+                        return parsed_date.to_pydatetime() if not pd.isna(parsed_date) else default
+                except Exception as e:
+                    logger.warning(f"Error convirtiendo {column_name}: {e}")
+                    return default
+            return default
         
-        # ✅ Mapear columnas esperadas (versión mejorada)
-        column_mapping = {
-            'client_name': ['client_name', 'nombre_cliente', 'cliente', 'name', 'nombre', 'client', 'customer', 'customer_name'],
-            'client_type': ['client_type', 'tipo_cliente', 'tipo', 'type', 'category', 'categoria'],
-            'executive': ['executive', 'ejecutivo', 'responsable', 'manager', 'gerente', 'vendedor', 'seller'],
-            'product': ['product', 'producto', 'service', 'servicio', 'item'],
-            'value': ['value', 'valor', 'amount', 'monto', 'price', 'precio', 'cost', 'costo'],
-            'date': ['date', 'fecha', 'timestamp', 'created_at', 'fecha_creacion'],
-            'description': ['description', 'descripcion', 'desc', 'notes', 'notas', 'comments', 'comentarios']
-        }
-        
-        # ✅ Función mejorada para encontrar la columna correcta
-        def find_column(possible_names, df_columns):
-            df_columns_lower = [col.lower().strip() for col in df_columns]
-            for name in possible_names:
-                name_lower = name.lower().strip()
-                # Buscar coincidencia exacta primero
-                if name_lower in df_columns_lower:
-                    idx = df_columns_lower.index(name_lower)
-                    return df_columns[idx]
-                # Buscar coincidencia parcial
-                for i, col in enumerate(df_columns_lower):
-                    if name_lower in col or col in name_lower:
-                        return df_columns[i]
-            return None
-        
-        # ✅ Identificar columnas disponibles
-        client_name_col = find_column(column_mapping['client_name'], df.columns)
-        client_type_col = find_column(column_mapping['client_type'], df.columns)
-        executive_col = find_column(column_mapping['executive'], df.columns)
-        product_col = find_column(column_mapping['product'], df.columns)
-        value_col = find_column(column_mapping['value'], df.columns)
-        date_col = find_column(column_mapping['date'], df.columns)
-        description_col = find_column(column_mapping['description'], df.columns)
-        
-        logger.info(f"Mapeo de columnas encontradas:")
-        logger.info(f"  - client_name: {client_name_col}")
-        logger.info(f"  - client_type: {client_type_col}")
-        logger.info(f"  - executive: {executive_col}")
-        logger.info(f"  - product: {product_col}")
-        logger.info(f"  - value: {value_col}")
-        logger.info(f"  - date: {date_col}")
-        logger.info(f"  - description: {description_col}")
-        
-        # ✅ Validar que al menos tengamos client_name
-        if not client_name_col:
-            available_columns = ", ".join(df.columns)
-            raise HTTPException(
-                status_code=400,
-                detail=f"No se encontró una columna válida para 'client_name'. Columnas disponibles: {available_columns}"
-            )
-        
-        # Crear lista de objetos ClientData para inserción en lote
+        # Procesar registros
         processed_records = []
         errors = []
         
-        logger.info(f"Procesando {len(df)} filas...")
+        logger.info(f"Procesando {len(df)} filas con todas las columnas...")
         
         for index, row in df.iterrows():
             try:
-                # ✅ Extraer client_name de manera más robusta
-                client_name_raw = row[client_name_col]
-                if pd.isna(client_name_raw) or str(client_name_raw).strip() == '' or str(client_name_raw).lower() in ['nan', 'none', 'null']:
-                    errors.append(f"Fila {index + 1}: Nombre de cliente vacío o inválido")
-                    continue
-                
-                client_name = str(client_name_raw).strip()
-                
-                # ✅ Extraer otros campos con manejo mejorado de nulos
-                client_type = "No especificado"
-                if client_type_col and not pd.isna(row[client_type_col]):
-                    client_type = str(row[client_type_col]).strip()
-                
-                executive = "No asignado"
-                if executive_col and not pd.isna(row[executive_col]):
-                    executive = str(row[executive_col]).strip()
-                
-                product = "No especificado"
-                if product_col and not pd.isna(row[product_col]):
-                    product = str(row[product_col]).strip()
-                
-                # ✅ Procesar valor numérico de manera más robusta
-                value = 0.0
-                if value_col and not pd.isna(row[value_col]):
-                    try:
-                        value_str = str(row[value_col]).replace(',', '').replace('$', '').replace('€', '').replace('£', '').strip()
-                        # Remover cualquier carácter no numérico excepto punto y signo negativo
-                        import re
-                        value_str = re.sub(r'[^\d.-]', '', value_str)
-                        if value_str:
-                            value = float(value_str)
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Fila {index + 1}: No se pudo convertir valor '{row[value_col]}' a número: {e}")
-                        value = 0.0
-                
-                # ✅ Procesar fecha de manera más robusta
-                date = datetime.utcnow()
-                if date_col and not pd.isna(row[date_col]):
-                    try:
-                        parsed_date = pd.to_datetime(row[date_col], errors='coerce')
-                        if not pd.isna(parsed_date):
-                            date = parsed_date.to_pydatetime()
-                    except Exception as e:
-                        logger.warning(f"Fila {index + 1}: No se pudo parsear fecha '{row[date_col]}': {e}")
-                
-                description = None
-                if description_col and not pd.isna(row[description_col]):
-                    description = str(row[description_col]).strip()
-                    if description == '' or description.lower() in ['nan', 'none', 'null']:
-                        description = None
-                
-                # ✅ Crear objeto ClientData
-                client_data = ClientData(
-                    client_name=client_name,
-                    client_type=client_type,
-                    executive=executive,
-                    product=product,
-                    value=value,
-                    date=date,
-                    description=description
+                # Crear registro con TODAS las columnas del CSV
+                client_record = ClientData(
+                    # Metadatos
+                    uploaded_at=datetime.utcnow(),
+                    filename=file.filename,
+                    
+                    # ===== TODAS LAS COLUMNAS DEL CSV =====
+                    fecha=get_safe_value(row, 'Fecha', str),
+                    tipo_de_venta=get_safe_value(row, 'Tipo de Venta', str),
+                    documento=get_safe_value(row, 'Documento', str),
+                    factura=get_safe_value(row, 'Factura', str),
+                    codigo=get_safe_value(row, 'Codigo', str),
+                    cliente=get_safe_value(row, 'Cliente', str),
+                    tipo_de_cliente=get_safe_value(row, 'Tipo de Cliente', str),
+                    sku=get_safe_value(row, 'SKU', str),
+                    articulo=get_safe_value(row, 'Articulo', str),
+                    proveedor=get_safe_value(row, 'Proveedor', str),
+                    almacen=get_safe_value(row, 'Almacen', str),
+                    cantidad=get_safe_value(row, 'Cantidad', float, 0.0),
+                    um=get_safe_value(row, 'U.M.', str),
+                    p_venta=get_safe_value(row, 'P. Venta', float, 0.0),
+                    c_unit=get_safe_value(row, 'C. Unit', float, 0.0),
+                    venta=get_safe_value(row, 'Venta', float, 0.0),
+                    costo=get_safe_value(row, 'Costo', float, 0.0),
+                    mb=get_safe_value(row, 'MB', float, 0.0),
+                    mb_percent=get_safe_value(row, '%MB', str),
+                    sociedad=get_safe_value(row, 'Sociedad', str),
+                    bc=get_safe_value(row, 'BC', str),
+                    bt=get_safe_value(row, 'BT', str),
+                    bu=get_safe_value(row, 'BU', str),
+                    bs=get_safe_value(row, 'BS', str),
+                    comercial=get_safe_value(row, 'Comercial', str),
+                    tipo_cliente=get_safe_value(row, 'Tipo_Cliente', str),
+                    categoria=get_safe_value(row, 'CATEGORIA', str),
+                    supercategoria=get_safe_value(row, 'SUPERCATEGORIA', str),
+                    cruce=get_safe_value(row, 'CRUCE', str),
+                    
+                    # ===== CAMPOS DE COMPATIBILIDAD =====
+                    client_name=get_safe_value(row, 'Cliente', str, "Sin nombre"),
+                    client_type=get_safe_value(row, 'Tipo de Cliente', str, "No especificado"),
+                    executive=get_safe_value(row, 'Comercial', str, "No asignado"),
+                    product=get_safe_value(row, 'Articulo', str, "No especificado"),
+                    value=get_safe_value(row, 'Venta', float, 0.0),
+                    date=get_safe_value(row, 'Fecha', datetime, datetime.utcnow()),
+                    description=f"Importado desde {file.filename} - Fila {index + 1}"
                 )
-                processed_records.append(client_data)
                 
-                # Log de progreso cada 1000 registros
+                processed_records.append(client_record)
+                
                 if (index + 1) % 1000 == 0:
                     logger.info(f"Procesadas {index + 1} filas...")
-                
+                    
             except Exception as e:
                 logger.error(f"Error procesando fila {index + 1}: {str(e)}")
                 errors.append(f"Fila {index + 1}: Error procesando datos - {str(e)}")
                 continue
         
-        # Si no hay registros procesados exitosamente
         if not processed_records:
             error_message = f"No se pudieron procesar registros. Errores: {'; '.join(errors[:5])}"
             logger.error(error_message)
-            raise HTTPException(
-                status_code=400,
-                detail=error_message
-            )
+            raise HTTPException(status_code=400, detail=error_message)
         
         logger.info(f"Registros procesados exitosamente: {len(processed_records)}")
         
-        # ✅ INSERCIÓN EN LOTE optimizada
+        # Guardar en lotes
         saved_count = 0
         try:
-            # Insertar en lotes más pequeños para mejor rendimiento
             batch_size = 1000
             total_batches = (len(processed_records) + batch_size - 1) // batch_size
             
@@ -292,42 +224,32 @@ async def upload_csv(
                 saved_count += len(batch)
                 logger.info(f"Lote {(i // batch_size) + 1}/{total_batches} guardado: {len(batch)} registros")
             
-            logger.info(f"✅ {saved_count} registros guardados exitosamente en la base de datos")
+            logger.info(f"✅ {saved_count} registros guardados exitosamente con todas las columnas")
             
         except Exception as e:
             db.rollback()
             error_msg = f"Error guardando en base de datos: {str(e)}"
             logger.error(error_msg)
             logger.error(traceback.format_exc())
-            raise HTTPException(
-                status_code=500,
-                detail=error_msg
-            )
+            raise HTTPException(status_code=500, detail=error_msg)
         
-        # ✅ Preparar respuesta con más detalles
+        # Preparar respuesta detallada
         response_data = {
             "success": True,
-            "message": f"Archivo procesado exitosamente. {saved_count} registros guardados.",
+            "message": f"Archivo procesado exitosamente con todas las columnas. {saved_count} registros guardados.",
             "details": {
                 "filename": file.filename,
                 "total_rows": len(df),
                 "processed_rows": len(processed_records),
                 "saved_rows": saved_count,
                 "errors_count": len(errors),
-                "columns_found": {
-                    "client_name": client_name_col,
-                    "client_type": client_type_col,
-                    "executive": executive_col,
-                    "product": product_col,
-                    "value": value_col,
-                    "date": date_col,
-                    "description": description_col
-                },
-                "data_replaced": replace_data
+                "all_columns_mapped": True,
+                "columns_found": list(df.columns),
+                "columns_count": len(df.columns),
+                "storage_method": "Todas las columnas en campos individuales"
             }
         }
         
-        # Agregar errores si los hay (solo los primeros 10)
         if errors:
             response_data["errors"] = errors[:10]
             if len(errors) > 10:
@@ -342,36 +264,63 @@ async def upload_csv(
         error_msg = f"Error inesperado: {str(e)}"
         logger.error(error_msg)
         logger.error(traceback.format_exc())
-        raise HTTPException(
-            status_code=500,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=500, detail=error_msg)
 
 @app.get("/client-data")
 async def get_client_data(
-    limit: int = 1000,  # ✅ Añadir límite por defecto
-    offset: int = 0,    # ✅ Añadir offset para paginación
+    limit: int = 100,
+    offset: int = 0,
+    include_all_fields: bool = False,
     db: Session = Depends(get_database)
 ):
-    """Obtener datos de clientes con paginación"""
+    """Obtener datos de clientes con opción de incluir todos los campos"""
     try:
-        # Contar total de registros
         total_count = db.query(ClientData).count()
-        
-        # Obtener registros con límite y offset
         clients = db.query(ClientData).offset(offset).limit(limit).all()
         
         logger.info(f"Consultando datos: {len(clients)} registros (de {total_count} totales)")
         
-        return {
-            "success": True,
-            "total_count": total_count,
-            "count": len(clients),
-            "offset": offset,
-            "limit": limit,
-            "data": [
-                {
+        if include_all_fields:
+            # Devolver TODOS los campos
+            client_data = []
+            for client in clients:
+                client_dict = {
                     "id": client.id,
+                    "uploaded_at": client.uploaded_at.isoformat() if client.uploaded_at else None,
+                    "filename": client.filename,
+                    
+                    # Campos del CSV
+                    "fecha": client.fecha,
+                    "tipo_de_venta": client.tipo_de_venta,
+                    "documento": client.documento,
+                    "factura": client.factura,
+                    "codigo": client.codigo,
+                    "cliente": client.cliente,
+                    "tipo_de_cliente": client.tipo_de_cliente,
+                    "sku": client.sku,
+                    "articulo": client.articulo,
+                    "proveedor": client.proveedor,
+                    "almacen": client.almacen,
+                    "cantidad": float(client.cantidad) if client.cantidad else None,
+                    "um": client.um,
+                    "p_venta": float(client.p_venta) if client.p_venta else None,
+                    "c_unit": float(client.c_unit) if client.c_unit else None,
+                    "venta": float(client.venta) if client.venta else None,
+                    "costo": float(client.costo) if client.costo else None,
+                    "mb": float(client.mb) if client.mb else None,
+                    "mb_percent": client.mb_percent,
+                    "sociedad": client.sociedad,
+                    "bc": client.bc,
+                    "bt": client.bt,
+                    "bu": client.bu,
+                    "bs": client.bs,
+                    "comercial": client.comercial,
+                    "tipo_cliente": client.tipo_cliente,
+                    "categoria": client.categoria,
+                    "supercategoria": client.supercategoria,
+                    "cruce": client.cruce,
+                    
+                    # Campos de compatibilidad
                     "client_name": client.client_name,
                     "client_type": client.client_type,
                     "executive": client.executive,
@@ -380,11 +329,212 @@ async def get_client_data(
                     "date": client.date.isoformat() if client.date else None,
                     "description": client.description
                 }
+                client_data.append(client_dict)
+        else:
+            # Devolver solo campos básicos para compatibilidad
+            client_data = [
+                {
+                    "id": client.id,
+                    "client_name": client.client_name,
+                    "client_type": client.client_type,
+                    "executive": client.executive,
+                    "product": client.product,
+                    "value": client.value,
+                    "date": client.date.isoformat() if client.date else None,
+                    "description": client.description,
+                    
+                    # Campos principales del CSV
+                    "cliente": client.cliente,
+                    "factura": client.factura,
+                    "venta": float(client.venta) if client.venta else None,
+                    "fecha": client.fecha,
+                    "comercial": client.comercial,
+                    "categoria": client.categoria
+                }
                 for client in clients
             ]
+        
+        return {
+            "success": True,
+            "total_count": total_count,
+            "count": len(clients),
+            "offset": offset,
+            "limit": limit,
+            "include_all_fields": include_all_fields,
+            "data": client_data
         }
     except Exception as e:
         logger.error(f"Error consultando datos: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/client-data/full")
+async def get_client_data_full(
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_database)
+):
+    """Obtener datos completos con todas las columnas del CSV"""
+    return await get_client_data(limit, offset, include_all_fields=True, db=db)
+
+@app.get("/client-data/search")
+async def search_client_data(
+    cliente: str = None,
+    factura: str = None,
+    fecha_desde: str = None,
+    fecha_hasta: str = None,
+    comercial: str = None,
+    categoria: str = None,
+    proveedor: str = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_database)
+):
+    """Buscar datos con filtros específicos"""
+    try:
+        query = db.query(ClientData)
+        
+        # Aplicar filtros
+        if cliente:
+            query = query.filter(ClientData.cliente.ilike(f'%{cliente}%'))
+        
+        if factura:
+            query = query.filter(ClientData.factura.ilike(f'%{factura}%'))
+        
+        if fecha_desde:
+            query = query.filter(ClientData.fecha >= fecha_desde)
+        
+        if fecha_hasta:
+            query = query.filter(ClientData.fecha <= fecha_hasta)
+        
+        if comercial:
+            query = query.filter(ClientData.comercial.ilike(f'%{comercial}%'))
+        
+        if categoria:
+            query = query.filter(ClientData.categoria.ilike(f'%{categoria}%'))
+        
+        if proveedor:
+            query = query.filter(ClientData.proveedor.ilike(f'%{proveedor}%'))
+        
+        total_count = query.count()
+        records = query.offset(offset).limit(limit).all()
+        
+        return {
+            "success": True,
+            "total_count": total_count,
+            "count": len(records),
+            "filters_applied": {
+                "cliente": cliente,
+                "factura": factura,
+                "fecha_desde": fecha_desde,
+                "fecha_hasta": fecha_hasta,
+                "comercial": comercial,
+                "categoria": categoria,
+                "proveedor": proveedor
+            },
+            "data": [
+                {
+                    "id": record.id,
+                    "cliente": record.cliente,
+                    "factura": record.factura,
+                    "fecha": record.fecha,
+                    "venta": float(record.venta) if record.venta else None,
+                    "comercial": record.comercial,
+                    "categoria": record.categoria,
+                    "proveedor": record.proveedor,
+                    "articulo": record.articulo,
+                    "cantidad": float(record.cantidad) if record.cantidad else None,
+                    "um": record.um
+                }
+                for record in records
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en búsqueda: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analytics/summary")
+async def get_summary_analytics(db: Session = Depends(get_database)):
+    """Obtener analytics resumido"""
+    try:
+        # Estadísticas básicas
+        total_records = db.query(ClientData).count()
+        total_venta = db.query(func.sum(ClientData.venta)).scalar() or 0
+        
+        # Top clientes
+        top_clientes = db.query(
+            ClientData.cliente,
+            func.sum(ClientData.venta).label('total_venta'),
+            func.count(ClientData.id).label('total_facturas')
+        ).filter(
+            ClientData.cliente.isnot(None)
+        ).group_by(
+            ClientData.cliente
+        ).order_by(
+            func.sum(ClientData.venta).desc()
+        ).limit(10).all()
+        
+        # Top comerciales
+        top_comerciales = db.query(
+            ClientData.comercial,
+            func.sum(ClientData.venta).label('total_venta'),
+            func.count(ClientData.id).label('total_facturas')
+        ).filter(
+            ClientData.comercial.isnot(None)
+        ).group_by(
+            ClientData.comercial
+        ).order_by(
+            func.sum(ClientData.venta).desc()
+        ).limit(5).all()
+        
+        # Top categorías
+        top_categorias = db.query(
+            ClientData.categoria,
+            func.sum(ClientData.venta).label('total_venta'),
+            func.count(ClientData.id).label('total_facturas')
+        ).filter(
+            ClientData.categoria.isnot(None)
+        ).group_by(
+            ClientData.categoria
+        ).order_by(
+            func.sum(ClientData.venta).desc()
+        ).limit(10).all()
+        
+        return {
+            "success": True,
+            "summary": {
+                "total_records": total_records,
+                "total_venta": float(total_venta),
+                "average_venta": float(total_venta / total_records) if total_records > 0 else 0
+            },
+            "top_clientes": [
+                {
+                    "cliente": row.cliente,
+                    "total_venta": float(row.total_venta or 0),
+                    "total_facturas": row.total_facturas
+                }
+                for row in top_clientes
+            ],
+            "top_comerciales": [
+                {
+                    "comercial": row.comercial,
+                    "total_venta": float(row.total_venta or 0),
+                    "total_facturas": row.total_facturas
+                }
+                for row in top_comerciales
+            ],
+            "top_categorias": [
+                {
+                    "categoria": row.categoria,
+                    "total_venta": float(row.total_venta or 0),
+                    "total_facturas": row.total_facturas
+                }
+                for row in top_categorias
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en analytics: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/client-data/clear")
@@ -409,109 +559,92 @@ async def debug_count(db: Session = Depends(get_database)):
     try:
         count = db.query(ClientData).count()
         
-        # También obtener una muestra de los primeros 5 registros
-        sample = db.query(ClientData).limit(5).all()
-        sample_data = [
-            {
+        # Obtener una muestra de los primeros 3 registros con todos los campos
+        sample = db.query(ClientData).limit(3).all()
+        sample_data = []
+        
+        for client in sample:
+            sample_data.append({
                 "id": client.id,
-                "client_name": client.client_name,
-                "client_type": client.client_type,
-                "executive": client.executive,
-                "product": client.product,
-                "value": client.value
-            } for client in sample
-        ]
+                "cliente": client.cliente,
+                "factura": client.factura,
+                "fecha": client.fecha,
+                "venta": float(client.venta) if client.venta else None,
+                "comercial": client.comercial,
+                "categoria": client.categoria,
+                "articulo": client.articulo,
+                "proveedor": client.proveedor,
+                "filename": client.filename
+            })
         
         return {
             "count": count, 
             "message": f"Hay {count} registros en la base de datos",
-            "sample_data": sample_data
+            "sample_data": sample_data,
+            "all_columns_available": True
         }
     except Exception as e:
         logger.error(f"Error en debug count: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ✅ Nuevo endpoint para obtener información sobre las columnas del CSV
 @app.get("/debug/columns")
 async def debug_columns():
-    """Endpoint para mostrar qué columnas esperamos"""
+    """Endpoint para mostrar todas las columnas disponibles"""
     return {
-        "expected_columns": {
-            "client_name": ["client_name", "nombre_cliente", "cliente", "name", "nombre", "client", "customer", "customer_name"],
-            "client_type": ["client_type", "tipo_cliente", "tipo", "type", "category", "categoria"],
-            "executive": ["executive", "ejecutivo", "responsable", "manager", "gerente", "vendedor", "seller"],
-            "product": ["product", "producto", "service", "servicio", "item"],
-            "value": ["value", "valor", "amount", "monto", "price", "precio", "cost", "costo"],
-            "date": ["date", "fecha", "timestamp", "created_at", "fecha_creacion"],
-            "description": ["description", "descripcion", "desc", "notes", "notas", "comments", "comentarios"]
-        }
+        "csv_columns_mapped": [
+            "fecha", "tipo_de_venta", "documento", "factura", "codigo", "cliente", 
+            "tipo_de_cliente", "sku", "articulo", "proveedor", "almacen", "cantidad", 
+            "um", "p_venta", "c_unit", "venta", "costo", "mb", "mb_percent", 
+            "sociedad", "bc", "bt", "bu", "bs", "comercial", "tipo_cliente", 
+            "categoria", "supercategoria", "cruce"
+        ],
+        "compatibility_fields": [
+            "client_name", "client_type", "executive", "product", "value", "date", "description"
+        ],
+        "metadata_fields": [
+            "id", "uploaded_at", "filename"
+        ],
+        "total_fields": 32,
+        "message": "Todas las columnas del CSV se mapean a campos individuales de la tabla"
     }
 
-# ✅ Endpoint para previsualizar CSV sin guardarlo
 @app.post("/preview-csv")
 async def preview_csv(file: UploadFile = File(...)):
-    """
-    Endpoint para previsualizar un CSV sin guardarlo en la base de datos
-    """
+    """Previsualizar un CSV sin guardarlo"""
     try:
-        # Verificar que el archivo sea CSV
         if not file.filename.endswith('.csv'):
-            raise HTTPException(
-                status_code=400, 
-                detail="El archivo debe ser un CSV (.csv)"
-            )
+            raise HTTPException(status_code=400, detail="El archivo debe ser un CSV (.csv)")
         
-        # Leer el contenido del archivo
         contents = await file.read()
         csv_string = contents.decode('utf-8')
         csv_io = io.StringIO(csv_string)
         
-        # Leer solo las primeras 10 filas para previsualizar
+        # Leer solo las primeras 10 filas
         df = pd.read_csv(
             csv_io,
             encoding='utf-8',
             skipinitialspace=True,
             na_values=['', 'NA', 'N/A', 'null', 'NULL', 'None', 'NONE'],
             keep_default_na=True,
-            nrows=10  # Solo las primeras 10 filas
+            nrows=10
         )
         
-        # Limpiar nombres de columnas
         original_columns = list(df.columns)
-        df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
-        processed_columns = list(df.columns)
         
-        # Mapear columnas
-        column_mapping = {
-            'client_name': ['client_name', 'nombre_cliente', 'cliente', 'name', 'nombre', 'client', 'customer', 'customer_name'],
-            'client_type': ['client_type', 'tipo_cliente', 'tipo', 'type', 'category', 'categoria'],
-            'executive': ['executive', 'ejecutivo', 'responsable', 'manager', 'gerente', 'vendedor', 'seller'],
-            'product': ['product', 'producto', 'service', 'servicio', 'item'],
-            'value': ['value', 'valor', 'amount', 'monto', 'price', 'precio', 'cost', 'costo'],
-            'date': ['date', 'fecha', 'timestamp', 'created_at', 'fecha_creacion'],
-            'description': ['description', 'descripcion', 'desc', 'notes', 'notas', 'comments', 'comentarios']
-        }
+        # Verificar mapeo de columnas
+        expected_columns = [
+            "Fecha", "Tipo de Venta", "Documento", "Factura", "Codigo", "Cliente", 
+            "Tipo de Cliente", "SKU", "Articulo", "Proveedor", "Almacen", "Cantidad", 
+            "U.M.", "P. Venta", "C. Unit", "Venta", "Costo", "MB", "%MB", 
+            "Sociedad", "BC", "BT", "BU", "BS", "Comercial", "Tipo_Cliente", 
+            "CATEGORIA", "SUPERCATEGORIA", "CRUCE"
+        ]
         
-        def find_column(possible_names, df_columns):
-            df_columns_lower = [col.lower().strip() for col in df_columns]
-            for name in possible_names:
-                name_lower = name.lower().strip()
-                if name_lower in df_columns_lower:
-                    idx = df_columns_lower.index(name_lower)
-                    return df_columns[idx]
-                for i, col in enumerate(df_columns_lower):
-                    if name_lower in col or col in name_lower:
-                        return df_columns[i]
-            return None
+        matched_columns = [col for col in expected_columns if col in original_columns]
+        missing_columns = [col for col in expected_columns if col not in original_columns]
+        extra_columns = [col for col in original_columns if col not in expected_columns]
         
-        # Identificar mapeo de columnas
-        mapped_columns = {}
-        for field, options in column_mapping.items():
-            found_col = find_column(options, processed_columns)
-            if found_col:
-                mapped_columns[field] = found_col
-        
-        # Convertir las primeras filas a formato JSON serializable
+        # Convertir muestra a JSON
         sample_data = []
         for index, row in df.iterrows():
             row_dict = {}
@@ -526,21 +659,25 @@ async def preview_csv(file: UploadFile = File(...)):
         return {
             "success": True,
             "filename": file.filename,
-            "original_columns": original_columns,
-            "processed_columns": processed_columns,
-            "mapped_columns": mapped_columns,
+            "columns_found": original_columns,
+            "columns_count": len(original_columns),
+            "matching_analysis": {
+                "matched_columns": matched_columns,
+                "missing_columns": missing_columns,
+                "extra_columns": extra_columns,
+                "match_percentage": round((len(matched_columns) / len(expected_columns)) * 100, 2)
+            },
             "sample_data": sample_data,
-            "total_rows": len(df),
-            "message": f"Previsualización del CSV - Primeras {len(df)} filas mostradas"
+            "total_rows_preview": len(df),
+            "ready_to_upload": len(missing_columns) == 0,
+            "message": f"CSV analizado: {len(matched_columns)}/{len(expected_columns)} columnas coinciden"
         }
         
     except Exception as e:
         logger.error(f"Error en preview CSV: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error procesando archivo: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error procesando archivo: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+                    
