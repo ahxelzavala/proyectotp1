@@ -363,6 +363,13 @@
     display: flex;
   }
   
+  .help-item {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
   /* Estilo para pantallas pequeñas */
   @media (max-width: 768px) {
     .upload-section {
