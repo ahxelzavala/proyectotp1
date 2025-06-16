@@ -34,30 +34,101 @@ const Clients = ({ userRole, onLogout }) => {
       setDataLoading(true);
       setError(null);
       
-      // Verificar si la tabla clients existe y está poblada
-      let clientsResponse = await fetch('http://localhost:8000/clients');
-      if (!clientsResponse.ok || (await clientsResponse.json()).total_count === 0) {
-        console.log('Poblando tabla clients...');
-        await fetch('http://localhost:8000/clients/populate', { method: 'POST' });
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Esperar 3 segundos
+      console.log('🔄 Iniciando carga de analytics de clientes...');
+      
+      // Verificar conectividad del backend
+      try {
+        const healthCheck = await fetch('http://localhost:8000/health');
+        if (!healthCheck.ok) {
+          throw new Error('Backend no disponible');
+        }
+        console.log('✅ Backend conectado');
+      } catch (err) {
+        throw new Error('No se puede conectar con el backend');
       }
 
-      // Obtener datos de análisis (removemos frequency-scatter)
-      const [segmentation, acquisition, profitable, summary] = await Promise.all([
-        fetch('http://localhost:8000/clients/analytics/segmentation-stacked').then(r => r.json()),
-        fetch('http://localhost:8000/clients/analytics/acquisition-trend').then(r => r.json()),
-        fetch('http://localhost:8000/clients/analytics/most-profitable?limit=10').then(r => r.json()),
-        fetch('http://localhost:8000/clients/analytics/dashboard-summary').then(r => r.json())
-      ]);
+      // Poblar tabla clients si es necesario
+      try {
+        const clientsResponse = await fetch('http://localhost:8000/clients');
+        const clientsData = await clientsResponse.json();
+        
+        if (clientsData.total_count === 0) {
+          console.log('🔄 Poblando tabla clients...');
+          await fetch('http://localhost:8000/clients/populate', { method: 'POST' });
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2 segundos
+        }
+      } catch (err) {
+        console.warn('⚠️ Error poblando tabla clients:', err);
+      }
 
-      setSegmentationData(segmentation.data || []);
-      setAcquisitionData(acquisition.data || []);
-      setProfitableData(profitable.data || []);
-      setDashboardSummary(summary || {});
+      // Obtener datos de análisis con manejo robusto de errores
+      const endpoints = [
+        'http://localhost:8000/clients/analytics/segmentation-stacked',
+        'http://localhost:8000/clients/analytics/acquisition-trend',
+        'http://localhost:8000/clients/analytics/most-profitable?limit=15',
+        'http://localhost:8000/clients/analytics/dashboard-summary'
+      ];
+
+      const results = await Promise.allSettled(
+        endpoints.map(url => 
+          fetch(url)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              return response.json();
+            })
+            .catch(error => {
+              console.error(`Error en ${url}:`, error);
+              return { success: false, data: [], error: error.message };
+            })
+        )
+      );
+
+      // Procesar resultados con validación robusta
+      const [segmentation, acquisition, profitable, summary] = results;
+
+      // Segmentación
+      if (segmentation.status === 'fulfilled' && segmentation.value?.success) {
+        console.log('✅ Datos de segmentación cargados:', segmentation.value.data?.length || 0);
+        setSegmentationData(segmentation.value.data || []);
+      } else {
+        console.warn('⚠️ Error en segmentación:', segmentation.reason || segmentation.value?.error);
+        setSegmentationData([]);
+      }
+      
+      // Adquisición
+      if (acquisition.status === 'fulfilled' && acquisition.value?.success) {
+        console.log('✅ Datos de adquisición cargados:', acquisition.value.data?.length || 0);
+        setAcquisitionData(acquisition.value.data || []);
+      } else {
+        console.warn('⚠️ Error en adquisición:', acquisition.reason || acquisition.value?.error);
+        setAcquisitionData([]);
+      }
+      
+      // Rentables
+      if (profitable.status === 'fulfilled' && profitable.value?.success) {
+        console.log('✅ Datos de clientes rentables cargados:', profitable.value.data?.length || 0);
+        setProfitableData(profitable.value.data || []);
+      } else {
+        console.warn('⚠️ Error en clientes rentables:', profitable.reason || profitable.value?.error);
+        setProfitableData([]);
+      }
+      
+      // Summary
+      if (summary.status === 'fulfilled' && summary.value?.success) {
+        console.log('✅ Resumen del dashboard cargado');
+        setDashboardSummary(summary.value || {});
+      } else {
+        console.warn('⚠️ Error en resumen:', summary.reason || summary.value?.error);
+        setDashboardSummary({});
+      }
+
+      console.log('✅ Carga de analytics completada');
       
     } catch (err) {
+      console.error('❌ Error general:', err);
       setError('Error cargando datos de análisis de clientes: ' + err.message);
-      console.error('Error:', err);
     } finally {
       setDataLoading(false);
     }
@@ -65,26 +136,38 @@ const Clients = ({ userRole, onLogout }) => {
 
   // Procesar datos para gráfico de segmentación apilada
   const processSegmentationData = () => {
+    if (!segmentationData || segmentationData.length === 0) {
+      return [];
+    }
+
     const processed = {};
     segmentationData.forEach(item => {
       const key = item.categoria || 'Sin categoría';
       if (!processed[key]) {
         processed[key] = { categoria: key };
       }
-      processed[key][item.tipo_cliente || 'Sin tipo'] = item.cantidad_clientes;
+      processed[key][item.tipo_cliente || 'Sin tipo'] = item.cantidad_clientes || 0;
     });
-    return Object.values(processed).slice(0, 8); // Limitar para que se vea bien
+    
+    return Object.values(processed).slice(0, 8); // Limitar para mejor visualización
   };
 
   // Procesar datos para tendencia de adquisición
   const processAcquisitionData = () => {
+    if (!acquisitionData || acquisitionData.length === 0) {
+      return [];
+    }
+
     const monthlyTotals = {};
     acquisitionData.forEach(item => {
-      if (!monthlyTotals[item.mes]) {
-        monthlyTotals[item.mes] = { mes: item.mes, total: 0 };
+      if (item.mes) {
+        if (!monthlyTotals[item.mes]) {
+          monthlyTotals[item.mes] = { mes: item.mes, total: 0 };
+        }
+        monthlyTotals[item.mes].total += item.nuevos_clientes || 0;
       }
-      monthlyTotals[item.mes].total += item.nuevos_clientes;
     });
+    
     return Object.values(monthlyTotals)
       .sort((a, b) => a.mes.localeCompare(b.mes))
       .slice(-12); // Últimos 12 meses
@@ -107,43 +190,57 @@ const Clients = ({ userRole, onLogout }) => {
     return null;
   };
 
-  if (dataLoading) {
-    return (
-      <div className="dashboard-layout">
-        <Sidebar userRole={userRole} onLogout={onLogout} />
-        <div className="dashboard-content">
-          <div className="clients-container">
-            <h1 className="titulo">Análisis de Clientes</h1>
-            <div className="loading-container">
-              <div className="loading-spinner"></div>
-              <p>Cargando análisis de clientes...</p>
-              <p>Procesando datos agregados...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Función para formatear moneda
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('es-PE', {
+      style: 'currency',
+      currency: 'PEN',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount || 0);
+  };
 
-  if (error) {
-    return (
-      <div className="dashboard-layout">
-        <Sidebar userRole={userRole} onLogout={onLogout} />
-        <div className="dashboard-content">
-          <div className="clients-container">
-            <h1 className="titulo">Análisis de Clientes</h1>
-            <div className="error-container">
-              <h3>Error en Analytics</h3>
-              <p>{error}</p>
-              <button onClick={fetchAllAnalytics} className="retry-button">
-                Reintentar
-              </button>
-            </div>
+  // Componente de carga
+  const LoadingComponent = () => (
+    <div className="dashboard-layout">
+      <Sidebar userRole={userRole} onLogout={onLogout} />
+      <div className="dashboard-content">
+        <div className="clients-container">
+          <h1 className="titulo">Análisis de Clientes</h1>
+          <div className="loading-container">
+            <div className="loading-spinner"></div>
+            <p>Cargando análisis de clientes...</p>
+            <p>Procesando datos y conectando con la base de datos...</p>
           </div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+
+  // Componente de error
+  const ErrorComponent = () => (
+    <div className="dashboard-layout">
+      <Sidebar userRole={userRole} onLogout={onLogout} />
+      <div className="dashboard-content">
+        <div className="clients-container">
+          <h1 className="titulo">Análisis de Clientes</h1>
+          <div className="error-container">
+            <h3>Error en Analytics</h3>
+            <p>{error}</p>
+            <button onClick={fetchAllAnalytics} className="retry-button">
+              🔄 Reintentar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (dataLoading) return <LoadingComponent />;
+  if (error) return <ErrorComponent />;
+
+  const processedSegmentation = processSegmentationData();
+  const processedAcquisition = processAcquisitionData();
 
   return (
     <div className="dashboard-layout">
@@ -160,11 +257,11 @@ const Clients = ({ userRole, onLogout }) => {
                 <p>Total Clientes</p>
               </div>
               <div className="stat-item">
-                <h3>${(dashboardSummary.summary.total_sales || 0).toLocaleString()}</h3>
+                <h3>{formatCurrency(dashboardSummary.summary.total_sales || 0)}</h3>
                 <p>Ventas Totales</p>
               </div>
               <div className="stat-item">
-                <h3>${(dashboardSummary.summary.total_mb || 0).toLocaleString()}</h3>
+                <h3>{formatCurrency(dashboardSummary.summary.total_mb || 0)}</h3>
                 <p>Margen Bruto</p>
               </div>
               <div className="stat-item">
@@ -181,16 +278,16 @@ const Clients = ({ userRole, onLogout }) => {
             <div className="card">
               <h2>Segmentación de clientes por tipo y categoría</h2>
               <div className="chart-placeholder">
-                {processSegmentationData().length > 0 ? (
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={processSegmentationData()}>
+                {processedSegmentation.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={processedSegmentation}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis 
                         dataKey="categoria" 
                         tick={{ fontSize: 10 }}
                         angle={-45}
                         textAnchor="end"
-                        height={60}
+                        height={80}
                       />
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip content={<CustomTooltip />} />
@@ -202,7 +299,9 @@ const Clients = ({ userRole, onLogout }) => {
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="placeholder-text">No hay datos disponibles</div>
+                  <div className="placeholder-text">
+                    📊 No hay datos de segmentación disponibles
+                  </div>
                 )}
               </div>
             </div>
@@ -213,21 +312,31 @@ const Clients = ({ userRole, onLogout }) => {
               <div className="chart-placeholder">
                 {profitableData.length > 0 ? (
                   <div className="profitable-clients-list">
-                    {profitableData.slice(0, 8).map((client, index) => (
+                    {profitableData.slice(0, 10).map((client, index) => (
                       <div key={index} className="profitable-client-item">
                         <div className="client-info">
-                          <span className="client-name">{client.cliente}</span>
-                          <span className="client-type">({client.tipo_cliente})</span>
+                          <span className="client-name">
+                            {client.cliente || 'Cliente sin nombre'}
+                          </span>
+                          <span className="client-type">
+                            ({client.tipo_cliente || 'Sin tipo'})
+                          </span>
                         </div>
                         <div className="client-metrics">
-                          <span className="client-sales">${client.total_ventas.toLocaleString()}</span>
-                          <span className="client-margin">{client.rentabilidad_porcentaje}% MB</span>
+                          <span className="client-sales">
+                            {formatCurrency(client.total_ventas || 0)}
+                          </span>
+                          <span className="client-margin">
+                            {(client.rentabilidad_porcentaje || 0).toFixed(1)}% MB
+                          </span>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="placeholder-text">No hay datos disponibles</div>
+                  <div className="placeholder-text">
+                    💰 No hay datos de clientes rentables disponibles
+                  </div>
                 )}
               </div>
             </div>
@@ -238,9 +347,9 @@ const Clients = ({ userRole, onLogout }) => {
           <div className="full-width-card">
             <h2>Tendencia de adquisición de nuevos clientes</h2>
             <div className="chart-placeholder">
-              {processAcquisitionData().length > 0 ? (
+              {processedAcquisition.length > 0 ? (
                 <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={processAcquisitionData()}>
+                  <LineChart data={processedAcquisition}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       dataKey="mes" 
@@ -263,7 +372,9 @@ const Clients = ({ userRole, onLogout }) => {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="placeholder-text">No hay datos disponibles</div>
+                <div className="placeholder-text">
+                  📈 No hay datos de tendencia de adquisición disponibles
+                </div>
               )}
             </div>
           </div>
@@ -273,11 +384,13 @@ const Clients = ({ userRole, onLogout }) => {
             <div className="executives-section">
               <h2>Top Ejecutivos Comerciales</h2>
               <div className="executives-grid">
-                {dashboardSummary.top_executives.slice(0, 5).map((exec, index) => (
+                {dashboardSummary.top_executives.slice(0, 6).map((exec, index) => (
                   <div key={index} className="executive-card">
-                    <h3>{exec.ejecutivo}</h3>
-                    <p className="exec-clients">{exec.num_clientes} clientes</p>
-                    <p className="exec-sales">${exec.total_ventas.toLocaleString()}</p>
+                    <h3>{exec.ejecutivo || 'Sin nombre'}</h3>
+                    <p className="exec-clients">{exec.num_clientes || 0} clientes</p>
+                    <p className="exec-sales">
+                      {formatCurrency(exec.total_ventas || 0)}
+                    </p>
                   </div>
                 ))}
               </div>
