@@ -1127,3 +1127,932 @@ async def get_clients_count(db: Session = Depends(get_database)):
     except Exception as e:
         logger.error(f"Error verificando tabla clients: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products/top-sold")
+async def get_top_sold_products(db: Session = Depends(get_database)):
+    """Obtenemos los productos más vendidos en los últimos 3, 6 y 12 meses"""
+    try:
+        # Consulta SQL para obtener ventas por producto (últimos 12 meses)
+        query = text("""
+            SELECT 
+                producto,
+                SUM(venta) AS total_ventas,
+                COUNT(DISTINCT factura) AS total_facturas
+            FROM client_data
+            WHERE fecha >= CURRENT_DATE - INTERVAL '12 months'
+            GROUP BY producto
+            ORDER BY total_ventas DESC
+            LIMIT 10
+        """)
+        result = db.execute(query).fetchall()
+        products_data = [{"producto": row[0], "total_ventas": float(row[1])} for row in result]
+        return {"success": True, "data": products_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener datos de productos: {str(e)}")
+
+        
+
+# ===== ENDPOINTS PARA MÓDULO DE PRODUCTOS =====
+# Agregar estos endpoints al final de main.py
+
+@app.get("/products/analytics/comparative-bars")
+async def get_products_comparative_bars(
+    period: str = "12m",  # 3m, 6m, 12m
+    limit: int = 15,
+    db: Session = Depends(get_database)
+):
+    """
+    Gráfico de barras comparativo de productos: Ventas de productos más populares
+    en diferentes períodos (3, 6 y 12 meses)
+    Variables: Articulo, Venta, Cantidad, Fecha
+    """
+    try:
+        # Definir el período
+        period_mapping = {
+            "3m": 3,
+            "6m": 6, 
+            "12m": 12
+        }
+        months = period_mapping.get(period, 12)
+        
+        # Consulta para obtener productos más vendidos por período
+        query = text("""
+            WITH product_sales AS (
+                SELECT 
+                    COALESCE(articulo, 'Producto sin nombre') as producto,
+                    COALESCE(categoria, 'Sin categoría') as categoria,
+                    COALESCE(proveedor, 'Sin proveedor') as proveedor,
+                    SUM(COALESCE(venta, 0)) as total_ventas,
+                    SUM(COALESCE(cantidad, 0)) as total_cantidad,
+                    SUM(COALESCE(costo, 0)) as total_costo,
+                    SUM(COALESCE(mb, 0)) as total_margen,
+                    COUNT(DISTINCT factura) as num_facturas,
+                    COUNT(DISTINCT cliente) as num_clientes,
+                    CASE 
+                        WHEN SUM(COALESCE(venta, 0)) > 0 THEN
+                            ROUND((SUM(COALESCE(mb, 0)) / SUM(COALESCE(venta, 0))) * 100, 2)
+                        ELSE 0
+                    END as margen_porcentaje
+                FROM client_data 
+                WHERE articulo IS NOT NULL AND articulo != ''
+                    AND fecha::date >= CURRENT_DATE - INTERVAL ':months months'
+                GROUP BY articulo, categoria, proveedor
+            )
+            SELECT 
+                producto,
+                categoria,
+                proveedor,
+                total_ventas,
+                total_cantidad,
+                total_costo,
+                total_margen,
+                margen_porcentaje,
+                num_facturas,
+                num_clientes
+            FROM product_sales
+            WHERE total_ventas > 0
+            ORDER BY total_ventas DESC
+            LIMIT :limit
+        """)
+        
+        result = db.execute(query, {"months": months, "limit": limit}).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "producto": row.producto,
+                "categoria": row.categoria,
+                "proveedor": row.proveedor,
+                "total_ventas": float(row.total_ventas),
+                "total_cantidad": float(row.total_cantidad),
+                "total_costo": float(row.total_costo),
+                "total_margen": float(row.total_margen),
+                "margen_porcentaje": float(row.margen_porcentaje),
+                "num_facturas": row.num_facturas,
+                "num_clientes": row.num_clientes
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "period": f"Últimos {months} meses",
+            "chart_type": "comparative_bar",
+            "description": f"Top {limit} productos más vendidos en los últimos {months} meses"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en gráfico comparativo de productos: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products/analytics/trend-lines")
+async def get_products_trend_lines(
+    top_products: int = 10,
+    db: Session = Depends(get_database)
+):
+    """
+    Gráfico de líneas de tendencias de productos: Tendencias de ventas a lo largo del tiempo
+    Variables: Articulo, Fecha, Venta, Cantidad
+    """
+    try:
+        # Primero obtener los productos más vendidos
+        top_products_query = text("""
+            SELECT 
+                COALESCE(articulo, 'Producto sin nombre') as producto,
+                SUM(COALESCE(venta, 0)) as total_ventas
+            FROM client_data 
+            WHERE articulo IS NOT NULL AND articulo != ''
+                AND fecha IS NOT NULL
+            GROUP BY articulo
+            ORDER BY total_ventas DESC
+            LIMIT :top_products
+        """)
+        
+        top_products_result = db.execute(top_products_query, {"top_products": top_products}).fetchall()
+        top_product_names = [row.producto for row in top_products_result]
+        
+        if not top_product_names:
+            return {
+                "success": True,
+                "data": [],
+                "message": "No se encontraron productos con datos válidos"
+            }
+        
+        # Obtener tendencias mensuales para estos productos
+        trend_query = text("""
+            SELECT 
+                COALESCE(articulo, 'Producto sin nombre') as producto,
+                TO_CHAR(fecha::date, 'YYYY-MM') as mes,
+                SUM(COALESCE(venta, 0)) as ventas_mes,
+                SUM(COALESCE(cantidad, 0)) as cantidad_mes,
+                COUNT(DISTINCT factura) as facturas_mes,
+                AVG(COALESCE(venta, 0)) as venta_promedio
+            FROM client_data 
+            WHERE articulo = ANY(:product_names)
+                AND fecha IS NOT NULL
+                AND fecha::date >= CURRENT_DATE - INTERVAL '12 months'
+            GROUP BY articulo, TO_CHAR(fecha::date, 'YYYY-MM')
+            ORDER BY mes ASC, ventas_mes DESC
+        """)
+        
+        result = db.execute(trend_query, {"product_names": top_product_names}).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "producto": row.producto,
+                "mes": row.mes,
+                "ventas_mes": float(row.ventas_mes),
+                "cantidad_mes": float(row.cantidad_mes),
+                "facturas_mes": row.facturas_mes,
+                "venta_promedio": float(row.venta_promedio)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "line_trend",
+            "description": f"Tendencias mensuales de los top {top_products} productos más vendidos"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en tendencias de productos: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products/analytics/margin-scatter")
+async def get_products_margin_scatter(
+    min_sales: float = 1000,
+    db: Session = Depends(get_database)
+):
+    """
+    Gráfico de dispersión: Productos según cantidad vendida vs margen de beneficio
+    Variables: Articulo, Cantidad, MB, Venta, Costo
+    """
+    try:
+        # Consulta para obtener datos de dispersión de productos
+        query = text("""
+            SELECT 
+                COALESCE(articulo, 'Producto sin nombre') as producto,
+                COALESCE(categoria, 'Sin categoría') as categoria,
+                COALESCE(proveedor, 'Sin proveedor') as proveedor,
+                SUM(COALESCE(cantidad, 0)) as total_cantidad,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                SUM(COALESCE(costo, 0)) as total_costo,
+                SUM(COALESCE(mb, 0)) as total_margen,
+                COUNT(DISTINCT factura) as num_transacciones,
+                CASE 
+                    WHEN SUM(COALESCE(venta, 0)) > 0 THEN
+                        ROUND((SUM(COALESCE(mb, 0)) / SUM(COALESCE(venta, 0))) * 100, 2)
+                    ELSE 0
+                END as margen_porcentaje,
+                CASE
+                    WHEN SUM(COALESCE(cantidad, 0)) > 0 THEN
+                        SUM(COALESCE(venta, 0)) / SUM(COALESCE(cantidad, 0))
+                    ELSE 0
+                END as precio_promedio_unitario
+            FROM client_data 
+            WHERE articulo IS NOT NULL AND articulo != ''
+                AND cantidad IS NOT NULL AND cantidad > 0
+            GROUP BY articulo, categoria, proveedor
+            HAVING SUM(COALESCE(venta, 0)) >= :min_sales
+            ORDER BY total_margen DESC
+            LIMIT 100
+        """)
+        
+        result = db.execute(query, {"min_sales": min_sales}).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "producto": row.producto,
+                "categoria": row.categoria,
+                "proveedor": row.proveedor,
+                "total_cantidad": float(row.total_cantidad),
+                "total_ventas": float(row.total_ventas),
+                "total_costo": float(row.total_costo),
+                "total_margen": float(row.total_margen),
+                "margen_porcentaje": float(row.margen_porcentaje),
+                "num_transacciones": row.num_transacciones,
+                "precio_promedio_unitario": float(row.precio_promedio_unitario)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "scatter",
+            "description": f"Relación cantidad vendida vs margen de beneficio (ventas mínimas: ${min_sales:,.2f})"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en dispersión de margen: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products/analytics/pareto-80-20")
+async def get_products_pareto_analysis(db: Session = Depends(get_database)):
+    """
+    Gráfico de Pareto (80/20): 20% de productos que generan 80% de las ventas
+    Variables: Articulo, Venta, participación acumulada
+    """
+    try:
+        # Consulta para análisis de Pareto
+        query = text("""
+            WITH product_sales AS (
+                SELECT 
+                    COALESCE(articulo, 'Producto sin nombre') as producto,
+                    COALESCE(categoria, 'Sin categoría') as categoria,
+                    SUM(COALESCE(venta, 0)) as total_ventas,
+                    SUM(COALESCE(cantidad, 0)) as total_cantidad,
+                    SUM(COALESCE(mb, 0)) as total_margen
+                FROM client_data 
+                WHERE articulo IS NOT NULL AND articulo != ''
+                GROUP BY articulo, categoria
+            ),
+            ranked_products AS (
+                SELECT 
+                    producto,
+                    categoria,
+                    total_ventas,
+                    total_cantidad,
+                    total_margen,
+                    ROW_NUMBER() OVER (ORDER BY total_ventas DESC) as ranking,
+                    SUM(total_ventas) OVER () as ventas_totales
+                FROM product_sales
+                WHERE total_ventas > 0
+            ),
+            pareto_analysis AS (
+                SELECT 
+                    producto,
+                    categoria,
+                    total_ventas,
+                    total_cantidad,
+                    total_margen,
+                    ranking,
+                    ventas_totales,
+                    ROUND((total_ventas / ventas_totales) * 100, 2) as participacion_individual,
+                    ROUND((SUM(total_ventas) OVER (ORDER BY ranking) / ventas_totales) * 100, 2) as participacion_acumulada,
+                    COUNT(*) OVER () as total_productos
+                FROM ranked_products
+            )
+            SELECT 
+                producto,
+                categoria,
+                total_ventas,
+                total_cantidad,
+                total_margen,
+                ranking,
+                participacion_individual,
+                participacion_acumulada,
+                total_productos,
+                CASE 
+                    WHEN participacion_acumulada <= 80 THEN 'Top 80%'
+                    WHEN participacion_acumulada <= 95 THEN 'Medio 15%'
+                    ELSE 'Bottom 5%'
+                END as categoria_pareto,
+                CASE 
+                    WHEN participacion_acumulada <= 80 THEN true
+                    ELSE false
+                END as es_top_80
+            FROM pareto_analysis
+            ORDER BY ranking
+            LIMIT 200
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        data = []
+        top_80_count = 0
+        total_products = 0
+        
+        for row in result:
+            total_products = row.total_productos
+            if row.es_top_80:
+                top_80_count += 1
+                
+            data.append({
+                "producto": row.producto,
+                "categoria": row.categoria,
+                "total_ventas": float(row.total_ventas),
+                "total_cantidad": float(row.total_cantidad),
+                "total_margen": float(row.total_margen),
+                "ranking": row.ranking,
+                "participacion_individual": float(row.participacion_individual),
+                "participacion_acumulada": float(row.participacion_acumulada),
+                "categoria_pareto": row.categoria_pareto,
+                "es_top_80": row.es_top_80
+            })
+        
+        # Calcular estadísticas del Pareto
+        pareto_stats = {
+            "total_productos": total_products,
+            "productos_top_80": top_80_count,
+            "porcentaje_productos_top_80": round((top_80_count / total_products) * 100, 1) if total_products > 0 else 0,
+            "cumple_regla_80_20": top_80_count <= (total_products * 0.3)  # Típicamente el 20-30% de productos genera el 80%
+        }
+        
+        return {
+            "success": True,
+            "data": data,
+            "pareto_stats": pareto_stats,
+            "chart_type": "pareto",
+            "description": f"Análisis de Pareto: {top_80_count} productos ({pareto_stats['porcentaje_productos_top_80']}%) generan el 80% de las ventas"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en análisis de Pareto: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products/analytics/dashboard-summary")
+async def get_products_dashboard_summary(db: Session = Depends(get_database)):
+    """
+    Resumen ejecutivo para el dashboard de productos
+    """
+    try:
+        # Estadísticas generales de productos
+        general_stats_query = text("""
+            SELECT 
+                COUNT(DISTINCT articulo) as total_productos,
+                COUNT(DISTINCT categoria) as total_categorias,
+                COUNT(DISTINCT proveedor) as total_proveedores,
+                SUM(COALESCE(venta, 0)) as ventas_totales,
+                SUM(COALESCE(cantidad, 0)) as cantidad_total,
+                SUM(COALESCE(mb, 0)) as margen_total,
+                COUNT(DISTINCT factura) as total_transacciones,
+                CASE 
+                    WHEN SUM(COALESCE(venta, 0)) > 0 THEN
+                        ROUND((SUM(COALESCE(mb, 0)) / SUM(COALESCE(venta, 0))) * 100, 2)
+                    ELSE 0
+                END as margen_promedio_porcentaje
+            FROM client_data 
+            WHERE articulo IS NOT NULL AND articulo != ''
+        """)
+        
+        general_stats = db.execute(general_stats_query).fetchone()
+        
+        # Top categorías por ventas
+        top_categories_query = text("""
+            SELECT 
+                COALESCE(categoria, 'Sin categoría') as categoria,
+                COUNT(DISTINCT articulo) as num_productos,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                SUM(COALESCE(cantidad, 0)) as total_cantidad
+            FROM client_data 
+            WHERE categoria IS NOT NULL AND categoria != ''
+            GROUP BY categoria
+            ORDER BY total_ventas DESC
+            LIMIT 8
+        """)
+        
+        categories_result = db.execute(top_categories_query).fetchall()
+        
+        # Top proveedores
+        top_suppliers_query = text("""
+            SELECT 
+                COALESCE(proveedor, 'Sin proveedor') as proveedor,
+                COUNT(DISTINCT articulo) as num_productos,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                COUNT(DISTINCT cliente) as num_clientes
+            FROM client_data 
+            WHERE proveedor IS NOT NULL AND proveedor != ''
+            GROUP BY proveedor
+            ORDER BY total_ventas DESC
+            LIMIT 6
+        """)
+        
+        suppliers_result = db.execute(top_suppliers_query).fetchall()
+        
+        # Productos con mejor y peor margen
+        margin_analysis_query = text("""
+            WITH product_margins AS (
+                SELECT 
+                    COALESCE(articulo, 'Producto sin nombre') as producto,
+                    SUM(COALESCE(venta, 0)) as total_ventas,
+                    SUM(COALESCE(mb, 0)) as total_margen,
+                    CASE 
+                        WHEN SUM(COALESCE(venta, 0)) > 0 THEN
+                            ROUND((SUM(COALESCE(mb, 0)) / SUM(COALESCE(venta, 0))) * 100, 2)
+                        ELSE 0
+                    END as margen_porcentaje
+                FROM client_data 
+                WHERE articulo IS NOT NULL AND articulo != ''
+                GROUP BY articulo
+                HAVING SUM(COALESCE(venta, 0)) > 1000  -- Solo productos con ventas significativas
+            )
+            SELECT 
+                'mejor_margen' as tipo,
+                producto,
+                total_ventas,
+                margen_porcentaje
+            FROM product_margins
+            ORDER BY margen_porcentaje DESC
+            LIMIT 3
+            
+            UNION ALL
+            
+            SELECT 
+                'peor_margen' as tipo,
+                producto,
+                total_ventas,
+                margen_porcentaje
+            FROM product_margins
+            ORDER BY margen_porcentaje ASC
+            LIMIT 3
+        """)
+        
+        margin_result = db.execute(margin_analysis_query).fetchall()
+        
+        # Procesar resultados
+        categories_data = []
+        for row in categories_result:
+            categories_data.append({
+                "categoria": row.categoria,
+                "num_productos": row.num_productos,
+                "total_ventas": float(row.total_ventas),
+                "total_cantidad": float(row.total_cantidad)
+            })
+        
+        suppliers_data = []
+        for row in suppliers_result:
+            suppliers_data.append({
+                "proveedor": row.proveedor,
+                "num_productos": row.num_productos,
+                "total_ventas": float(row.total_ventas),
+                "num_clientes": row.num_clientes
+            })
+        
+        mejor_margen = []
+        peor_margen = []
+        for row in margin_result:
+            product_data = {
+                "producto": row.producto,
+                "total_ventas": float(row.total_ventas),
+                "margen_porcentaje": float(row.margen_porcentaje)
+            }
+            if row.tipo == 'mejor_margen':
+                mejor_margen.append(product_data)
+            else:
+                peor_margen.append(product_data)
+        
+        return {
+            "success": True,
+            "summary": {
+                "total_productos": general_stats.total_productos if general_stats else 0,
+                "total_categorias": general_stats.total_categorias if general_stats else 0,
+                "total_proveedores": general_stats.total_proveedores if general_stats else 0,
+                "ventas_totales": float(general_stats.ventas_totales) if general_stats and general_stats.ventas_totales else 0,
+                "cantidad_total": float(general_stats.cantidad_total) if general_stats and general_stats.cantidad_total else 0,
+                "margen_total": float(general_stats.margen_total) if general_stats and general_stats.margen_total else 0,
+                "margen_promedio_porcentaje": float(general_stats.margen_promedio_porcentaje) if general_stats and general_stats.margen_promedio_porcentaje else 0,
+                "total_transacciones": general_stats.total_transacciones if general_stats else 0
+            },
+            "top_categories": categories_data,
+            "top_suppliers": suppliers_data,
+            "mejor_margen": mejor_margen,
+            "peor_margen": peor_margen
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en dashboard summary de productos: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products/analytics/category-performance")
+async def get_category_performance(db: Session = Depends(get_database)):
+    """
+    Análisis de rendimiento por categoría de productos
+    Variables: Categoria, Supercategoria, Venta, Margen
+    """
+    try:
+        query = text("""
+            SELECT 
+                COALESCE(categoria, 'Sin categoría') as categoria,
+                COALESCE(supercategoria, 'Sin supercategoría') as supercategoria,
+                COUNT(DISTINCT articulo) as num_productos,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                SUM(COALESCE(cantidad, 0)) as total_cantidad,
+                SUM(COALESCE(mb, 0)) as total_margen,
+                COUNT(DISTINCT cliente) as num_clientes,
+                COUNT(DISTINCT factura) as num_transacciones,
+                CASE 
+                    WHEN SUM(COALESCE(venta, 0)) > 0 THEN
+                        ROUND((SUM(COALESCE(mb, 0)) / SUM(COALESCE(venta, 0))) * 100, 2)
+                    ELSE 0
+                END as margen_porcentaje,
+                ROUND(AVG(COALESCE(venta, 0)), 2) as venta_promedio
+            FROM client_data 
+            WHERE categoria IS NOT NULL AND categoria != ''
+            GROUP BY categoria, supercategoria
+            ORDER BY total_ventas DESC
+            LIMIT 20
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "categoria": row.categoria,
+                "supercategoria": row.supercategoria,
+                "num_productos": row.num_productos,
+                "total_ventas": float(row.total_ventas),
+                "total_cantidad": float(row.total_cantidad),
+                "total_margen": float(row.total_margen),
+                "num_clientes": row.num_clientes,
+                "num_transacciones": row.num_transacciones,
+                "margen_porcentaje": float(row.margen_porcentaje),
+                "venta_promedio": float(row.venta_promedio)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "category_performance",
+            "description": "Rendimiento por categorías de productos"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en rendimiento por categoría: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== ENDPOINT CORREGIDO PARA REEMPLAZAR EL EXISTENTE =====
+
+@app.get("/products/top-sold")
+async def get_top_sold_products(
+    period: str = "12m",  # 3m, 6m, 12m
+    limit: int = 20,
+    db: Session = Depends(get_database)
+):
+    """
+    Productos más vendidos en diferentes períodos
+    Variables: Articulo, Venta, Cantidad, Fecha
+    """
+    try:
+        # Definir el período
+        period_mapping = {
+            "3m": 3,
+            "6m": 6, 
+            "12m": 12
+        }
+        months = period_mapping.get(period, 12)
+        
+        # Consulta corregida para PostgreSQL
+        query = text("""
+            SELECT 
+                COALESCE(articulo, 'Producto sin nombre') as producto,
+                COALESCE(categoria, 'Sin categoría') as categoria,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                SUM(COALESCE(cantidad, 0)) as total_cantidad,
+                COUNT(DISTINCT factura) as total_facturas,
+                COUNT(DISTINCT cliente) as num_clientes,
+                ROUND(AVG(COALESCE(venta, 0)), 2) as venta_promedio
+            FROM client_data
+            WHERE articulo IS NOT NULL AND articulo != ''
+                AND fecha::date >= CURRENT_DATE - INTERVAL ':months months'
+            GROUP BY articulo, categoria
+            ORDER BY total_ventas DESC
+            LIMIT :limit
+        """)
+        
+        result = db.execute(query, {"months": months, "limit": limit}).fetchall()
+        
+        products_data = []
+        for row in result:
+            products_data.append({
+                "producto": row.producto,
+                "categoria": row.categoria,
+                "total_ventas": float(row.total_ventas),
+                "total_cantidad": float(row.total_cantidad),
+                "total_facturas": row.total_facturas,
+                "num_clientes": row.num_clientes,
+                "venta_promedio": float(row.venta_promedio)
+            })
+        
+        return {
+            "success": True, 
+            "data": products_data,
+            "period": f"Últimos {months} meses",
+            "description": f"Top {limit} productos más vendidos"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error al obtener productos más vendidos: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al obtener datos de productos: {str(e)}")
+
+
+        # ===== AGREGAR SOLO ESTOS ENDPOINTS MÍNIMOS AL FINAL DE main.py =====
+
+@app.get("/products/analytics/rotation-speed")
+async def get_rotation_speed(period: str = "12m", limit: int = 10, db: Session = Depends(get_database)):
+    """
+    Análisis de velocidad de rotación de productos
+    """
+    try:
+        # Filtro de período
+        period_filter = ""
+        if period == "3m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '3 months'"
+        elif period == "6m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '6 months'"
+        elif period == "12m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '12 months'"
+        
+        query = text(f"""
+            WITH product_rotation AS (
+                SELECT 
+                    producto,
+                    SUM(COALESCE(cantidad, 0)) as total_cantidad,
+                    COUNT(DISTINCT factura) as num_transacciones,
+                    SUM(COALESCE(venta, 0)) as total_ventas,
+                    COUNT(DISTINCT TO_CHAR(TO_DATE(fecha, 'YYYY-MM-DD'), 'YYYY-MM')) as meses_activos
+                FROM client_data 
+                WHERE producto IS NOT NULL AND producto != ''
+                    AND cantidad IS NOT NULL AND cantidad > 0
+                    {period_filter}
+                GROUP BY producto
+                HAVING SUM(COALESCE(venta, 0)) > 1000
+            )
+            SELECT 
+                producto,
+                total_cantidad,
+                num_transacciones,
+                total_ventas,
+                meses_activos,
+                CASE 
+                    WHEN meses_activos > 0 THEN 
+                        ROUND((num_transacciones::float / GREATEST(meses_activos, 1)), 2)
+                    ELSE 0
+                END as velocidad_rotacion,
+                CASE 
+                    WHEN (num_transacciones::float / GREATEST(meses_activos, 1)) >= 6 THEN 'Rápida'
+                    WHEN (num_transacciones::float / GREATEST(meses_activos, 1)) >= 3 THEN 'Media'
+                    ELSE 'Lenta'
+                END as categoria
+            FROM product_rotation
+            ORDER BY velocidad_rotacion DESC
+            LIMIT {limit}
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "producto": row.producto,
+                "total_cantidad": row.total_cantidad,
+                "num_transacciones": row.num_transacciones,
+                "total_ventas": float(row.total_ventas),
+                "velocidad_rotacion": float(row.velocidad_rotacion),
+                "categoria": row.categoria
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "rotation_analysis",
+            "description": f"Análisis de velocidad de rotación - Top {limit} productos"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en análisis de rotación: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== MODIFICAR ENDPOINTS EXISTENTES PARA SOPORTAR FILTROS DE PERÍODO =====
+
+# Si ya tienes estos endpoints, solo agrega el parámetro period y el filtro correspondiente:
+
+# 1. Modificar comparative-bars existente:
+@app.get("/products/analytics/comparative-bars")
+async def get_comparative_bars_analysis(period: str = "12m", limit: int = 15, db: Session = Depends(get_database)):
+    """
+    Análisis comparativo de productos con filtro de período
+    """
+    try:
+        # Agregar filtro de período
+        period_filter = ""
+        if period == "3m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '3 months'"
+        elif period == "6m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '6 months'"
+        elif period == "12m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '12 months'"
+        
+        # Tu query existente + el filtro
+        query = text(f"""
+            SELECT 
+                producto,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                SUM(COALESCE(margen_bruto, 0)) as total_margen,
+                SUM(COALESCE(cantidad, 0)) as total_cantidad,
+                COUNT(DISTINCT factura) as num_facturas,
+                AVG(CASE WHEN venta > 0 THEN (margen_bruto / venta * 100) ELSE 0 END) as margen_porcentaje
+            FROM client_data
+            WHERE producto IS NOT NULL AND producto != ''
+                AND venta IS NOT NULL AND venta > 0
+                {period_filter}
+            GROUP BY producto
+            ORDER BY total_ventas DESC
+            LIMIT {limit}
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "producto": row.producto,
+                "total_ventas": float(row.total_ventas),
+                "total_margen": float(row.total_margen or 0),
+                "total_cantidad": row.total_cantidad,
+                "num_facturas": row.num_facturas,
+                "margen_porcentaje": float(row.margen_porcentaje or 0)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "comparative_bars",
+            "description": f"Análisis comparativo de productos - {period}",
+            "period": period
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en análisis comparativo: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 2. Modificar trend-lines existente:
+@app.get("/products/analytics/trend-lines")
+async def get_trend_lines_analysis(top_products: int = 6, period: str = "12m", db: Session = Depends(get_database)):
+    """
+    Análisis de tendencias de productos con filtro de período
+    """
+    try:
+        # Agregar filtro de período
+        period_filter = ""
+        if period == "3m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '3 months'"
+        elif period == "6m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '6 months'"
+        elif period == "12m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '12 months'"
+        
+        # Tu query existente + el filtro
+        query = text(f"""
+            WITH top_products_list AS (
+                SELECT producto
+                FROM client_data
+                WHERE producto IS NOT NULL AND producto != ''
+                    AND venta IS NOT NULL AND venta > 0
+                    {period_filter}
+                GROUP BY producto
+                ORDER BY SUM(COALESCE(venta, 0)) DESC
+                LIMIT {top_products}
+            )
+            SELECT 
+                tp.producto,
+                TO_CHAR(TO_DATE(cd.fecha, 'YYYY-MM-DD'), 'YYYY-MM') as mes,
+                SUM(COALESCE(cd.venta, 0)) as ventas_mes
+            FROM top_products_list tp
+            JOIN client_data cd ON tp.producto = cd.producto
+            WHERE cd.fecha IS NOT NULL
+                AND cd.venta IS NOT NULL AND cd.venta > 0
+                {period_filter}
+            GROUP BY tp.producto, TO_CHAR(TO_DATE(cd.fecha, 'YYYY-MM-DD'), 'YYYY-MM')
+            ORDER BY mes, tp.producto
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "producto": row.producto,
+                "mes": row.mes,
+                "ventas_mes": float(row.ventas_mes)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "trend_lines",
+            "description": f"Tendencias de top {top_products} productos - {period}",
+            "period": period
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en análisis de tendencias: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 3. Modificar pareto-80-20 existente:
+@app.get("/products/analytics/pareto-80-20")
+async def get_pareto_analysis(period: str = "12m", db: Session = Depends(get_database)):
+    """
+    Análisis de Pareto 80/20 con filtro de período
+    """
+    try:
+        # Agregar filtro de período
+        period_filter = ""
+        if period == "3m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '3 months'"
+        elif period == "6m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '6 months'"
+        elif period == "12m":
+            period_filter = "AND TO_DATE(fecha, 'YYYY-MM-DD') >= CURRENT_DATE - INTERVAL '12 months'"
+        
+        # Tu query existente + el filtro
+        query = text(f"""
+            WITH product_sales AS (
+                SELECT 
+                    producto,
+                    SUM(COALESCE(venta, 0)) as total_ventas
+                FROM client_data
+                WHERE producto IS NOT NULL AND producto != ''
+                    AND venta IS NOT NULL AND venta > 0
+                    {period_filter}
+                GROUP BY producto
+            ),
+            total_sales AS (
+                SELECT SUM(total_ventas) as grand_total
+                FROM product_sales
+            ),
+            pareto_analysis AS (
+                SELECT 
+                    ps.producto,
+                    ps.total_ventas,
+                    (ps.total_ventas / ts.grand_total * 100) as participacion,
+                    SUM(ps.total_ventas / ts.grand_total * 100) OVER (
+                        ORDER BY ps.total_ventas DESC 
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) as participacion_acumulada
+                FROM product_sales ps
+                CROSS JOIN total_sales ts
+                ORDER BY ps.total_ventas DESC
+            )
+            SELECT 
+                producto,
+                total_ventas,
+                ROUND(participacion, 2) as participacion,
+                ROUND(participacion_acumulada, 2) as participacion_acumulada
+            FROM pareto_analysis
+            ORDER BY total_ventas DESC
+            LIMIT 20
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "producto": row.producto,
+                "total_ventas": float(row.total_ventas),
+                "participacion": float(row.participacion),
+                "participacion_acumulada": float(row.participacion_acumulada)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "pareto_analysis",
+            "description": f"Análisis de Pareto 80/20 - {period}",
+            "period": period
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en análisis de Pareto: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
