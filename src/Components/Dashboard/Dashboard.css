@@ -327,3 +327,199 @@
     font-size: 14px;
   }
 }
+
+/* ===== AGREGAR ESTOS ESTILOS AL ARCHIVO CSS PRINCIPAL O CREAR UN ARCHIVO Dashboard.css ===== */
+
+/* Layout principal del dashboard */
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f8fafc;
+}
+
+/* Contenido principal que se ajusta al sidebar */
+.dashboard-content {
+  flex: 1;
+  margin-left: 120px; /* Ancho del sidebar */
+  padding: 0;
+  overflow-x: auto;
+  min-height: 100vh;
+  background-color: #f8fafc;
+}
+
+/* Asegurar que todos los containers internos tengan el espacio correcto */
+.clients-container,
+.products-container,
+.analysis-container,
+.dashboard-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ajustes para el título principal */
+.clients-container .titulo,
+.products-container .titulo,
+.analysis-container .titulo,
+.dashboard-container .titulo {
+  font-size: 2.5rem;
+  color: #2c3e50;
+  text-align: center;
+  margin-bottom: 30px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .dashboard-content {
+    margin-left: 100px; /* Sidebar más pequeño en móvil */
+  }
+  
+  .clients-container,
+  .products-container,
+  .analysis-container,
+  .dashboard-container {
+    padding: 15px;
+  }
+  
+  .clients-container .titulo,
+  .products-container .titulo,
+  .analysis-container .titulo,
+  .dashboard-container .titulo {
+    font-size: 2rem;
+    margin-bottom: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-content {
+    margin-left: 80px;
+  }
+  
+  .clients-container,
+  .products-container,
+  .analysis-container,
+  .dashboard-container {
+    padding: 10px;
+  }
+  
+  .clients-container .titulo,
+  .products-container .titulo,
+  .analysis-container .titulo,
+  .dashboard-container .titulo {
+    font-size: 1.8rem;
+  }
+}
+
+/* Asegurar que el contenido no se desborde horizontalmente */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Específico para el módulo de Clientes */
+.clients-container {
+  background-color: #f8fafc;
+}
+
+/* Específico para otros módulos que puedas tener */
+.products-container {
+  background-color: #f8fafc;
+}
+
+.analysis-container {
+  background-color: #f8fafc;
+}
+
+.dashboard-container {
+  background-color: #f8fafc;
+}
+
+/* Asegurar que las cards tengan el espacio correcto */
+.card,
+.full-width-card {
+  margin-bottom: 25px;
+}
+
+/* Para centrar mejor los gráficos cuando no hay datos */
+.placeholder-text {
+  color: #6c757d;
+  font-style: italic;
+  text-align: center;
+  padding: 40px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px dashed #dee2e6;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+/* Mejorar el responsive del grid principal */
+.dashboard-grid,
+.dashboard-grid-two-columns {
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-grid-two-columns {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+/* Ajustes específicos para pantallas muy pequeñas */
+@media (max-width: 360px) {
+  .dashboard-content {
+    margin-left: 70px;
+  }
+  
+  .clients-container,
+  .products-container,
+  .analysis-container,
+  .dashboard-container {
+    padding: 8px;
+  }
+}
+
+/* Asegurar scroll suave */
+.dashboard-content {
+  scroll-behavior: smooth;
+}
+
+/* Para evitar que el contenido se corte */
+.dashboard-layout {
+  width: 100%;
+  overflow: hidden;
+}
+
+.dashboard-content {
+  width: calc(100% - 120px);
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .dashboard-content {
+    width: calc(100% - 100px);
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-content {
+    width: calc(100% - 80px);
+  }
+}

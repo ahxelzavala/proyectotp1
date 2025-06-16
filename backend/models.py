@@ -89,6 +89,22 @@ class ClientData(Base):
     def __repr__(self):
         return f"<ClientData(id={self.id}, cliente='{self.cliente}', factura='{self.factura}', venta={self.venta})>"
 
+class Clients(Base):
+    __tablename__ = "clients"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    client_name = Column(String(255), nullable=False, index=True)
+    client_type = Column(String(100), nullable=True)
+    executive = Column(String(100), nullable=True)
+    product = Column(String(200), nullable=True)
+    value = Column(Float, nullable=True)
+    date = Column(DateTime, nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<Clients(id={self.id}, client_name='{self.client_name}', value={self.value})>"
+
 # Modelo para emails autorizados (mantener igual)
 class AuthorizedEmail(Base):
     __tablename__ = "authorized_emails"
@@ -102,7 +118,7 @@ class AuthorizedEmail(Base):
         return f"<AuthorizedEmail(id={self.id}, email='{self.email}')>"
 
 def create_tables():
-    """Función para crear todas las tablas"""
+    """Función para crear todas las tablas incluyendo clients"""
     try:
         logger.info("Creando tablas en la base de datos...")
         Base.metadata.create_all(bind=engine)

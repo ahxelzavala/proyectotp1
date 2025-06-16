@@ -680,4 +680,450 @@ async def preview_csv(file: UploadFile = File(...)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-                    
+
+# ===== AGREGAR ESTOS ENDPOINTS AL FINAL DE main.py =====
+
+@app.get("/clients/analytics/segmentation-stacked")
+async def get_client_segmentation_stacked(db: Session = Depends(get_database)):
+    """
+    Gráfico de barras apiladas: Segmentación de clientes por tipo y supercategoría
+    Variables: Tipo de Cliente, CATEGORIA, Cantidad
+    """
+    try:
+        # Consulta para obtener segmentación por tipo de cliente y categoría
+        query = text("""
+            SELECT 
+                COALESCE(categoria, 'Sin categoría') as categoria,
+                COALESCE(tipo_de_cliente, 'Sin tipo') as tipo_cliente,
+                COUNT(DISTINCT cliente) as cantidad_clientes,
+                SUM(COALESCE(venta, 0)) as total_ventas
+            FROM client_data 
+            WHERE cliente IS NOT NULL AND cliente != ''
+            GROUP BY categoria, tipo_de_cliente
+            ORDER BY total_ventas DESC
+            LIMIT 50
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        # Procesar datos para el gráfico apilado
+        data = []
+        for row in result:
+            data.append({
+                "categoria": row.categoria,
+                "tipo_cliente": row.tipo_cliente,
+                "cantidad_clientes": row.cantidad_clientes,
+                "total_ventas": float(row.total_ventas)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "stacked_bar",
+            "description": "Segmentación de clientes por tipo y categoría"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en segmentación: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== REEMPLAZAR COMPLETAMENTE LOS ENDPOINTS EXISTENTES EN main.py CON ESTAS VERSIONES =====
+# Eliminar los endpoints antiguos que usan julianday() y strftime() y reemplazarlos con estos:
+
+@app.get("/clients/analytics/segmentation-stacked")
+async def get_client_segmentation_stacked(db: Session = Depends(get_database)):
+    """
+    Gráfico de barras apiladas: Segmentación de clientes por tipo y supercategoría
+    Variables: Tipo de Cliente, CATEGORIA, Cantidad
+    """
+    try:
+        # Consulta para obtener segmentación por tipo de cliente y categoría
+        query = text("""
+            SELECT 
+                COALESCE(categoria, 'Sin categoría') as categoria,
+                COALESCE(tipo_de_cliente, 'Sin tipo') as tipo_cliente,
+                COUNT(DISTINCT cliente) as cantidad_clientes,
+                SUM(COALESCE(venta, 0)) as total_ventas
+            FROM client_data 
+            WHERE cliente IS NOT NULL AND cliente != ''
+            GROUP BY categoria, tipo_de_cliente
+            ORDER BY total_ventas DESC
+            LIMIT 50
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        # Procesar datos para el gráfico apilado
+        data = []
+        for row in result:
+            data.append({
+                "categoria": row.categoria,
+                "tipo_cliente": row.tipo_cliente,
+                "cantidad_clientes": row.cantidad_clientes,
+                "total_ventas": float(row.total_ventas)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "stacked_bar",
+            "description": "Segmentación de clientes por tipo y categoría"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en segmentación: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/clients/analytics/frequency-scatter")
+async def get_client_frequency_scatter(db: Session = Depends(get_database)):
+    """
+    Gráfico de dispersión: Relación entre la frecuencia de compra y el tipo de cliente
+    Variables: Cliente, Fecha, Cantidad, Tipo de Cliente
+    """
+    try:
+        # Consulta para calcular frecuencia de compra por cliente (PostgreSQL)
+        query = text("""
+            SELECT 
+                cliente,
+                COALESCE(tipo_de_cliente, 'Sin tipo') as tipo_cliente,
+                COUNT(DISTINCT factura) as numero_facturas,
+                COUNT(DISTINCT DATE(fecha::date)) as dias_unicos_compra,
+                SUM(COALESCE(cantidad, 0)) as cantidad_total,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                MIN(fecha::date) as primera_compra,
+                MAX(fecha::date) as ultima_compra,
+                CASE 
+                    WHEN COUNT(DISTINCT DATE(fecha::date)) > 1 THEN
+                        CAST(COUNT(DISTINCT factura) AS FLOAT) / 
+                        GREATEST(1, EXTRACT(days FROM (MAX(fecha::date) - MIN(fecha::date))) / 30.0)
+                    ELSE 0
+                END as frecuencia_compra
+            FROM client_data 
+            WHERE cliente IS NOT NULL AND cliente != '' 
+                AND fecha IS NOT NULL
+            GROUP BY cliente, tipo_de_cliente
+            HAVING COUNT(DISTINCT factura) >= 1
+            ORDER BY frecuencia_compra DESC, total_ventas DESC
+            LIMIT 100
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "cliente": row.cliente,
+                "tipo_cliente": row.tipo_cliente,
+                "numero_facturas": row.numero_facturas,
+                "dias_unicos_compra": row.dias_unicos_compra,
+                "cantidad_total": float(row.cantidad_total),
+                "total_ventas": float(row.total_ventas),
+                "frecuencia_compra": float(row.frecuencia_compra)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "scatter",
+            "description": "Relación entre frecuencia de compra y tipo de cliente"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en frecuencia scatter: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/clients/analytics/acquisition-trend")
+async def get_client_acquisition_trend(db: Session = Depends(get_database)):
+    """
+    Gráfico de líneas: Tendencia de adquisición de nuevos clientes
+    Variables: Fecha, Cliente, Tipo de Cliente
+    """
+    try:
+        # Consulta para obtener la primera compra de cada cliente (PostgreSQL)
+        query = text("""
+            WITH first_purchases AS (
+                SELECT 
+                    cliente,
+                    COALESCE(tipo_de_cliente, 'Sin tipo') as tipo_cliente,
+                    MIN(fecha::date) as primera_compra
+                FROM client_data 
+                WHERE cliente IS NOT NULL AND cliente != '' 
+                    AND fecha IS NOT NULL
+                GROUP BY cliente, tipo_de_cliente
+            ),
+            monthly_acquisition AS (
+                SELECT 
+                    TO_CHAR(primera_compra, 'YYYY-MM') as mes,
+                    tipo_cliente,
+                    COUNT(*) as nuevos_clientes
+                FROM first_purchases
+                WHERE primera_compra IS NOT NULL
+                GROUP BY TO_CHAR(primera_compra, 'YYYY-MM'), tipo_cliente
+                ORDER BY mes DESC
+                LIMIT 100
+            )
+            SELECT 
+                mes,
+                tipo_cliente,
+                nuevos_clientes
+            FROM monthly_acquisition
+            ORDER BY mes ASC
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "mes": row.mes,
+                "tipo_cliente": row.tipo_cliente,
+                "nuevos_clientes": row.nuevos_clientes
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "line",
+            "description": "Tendencia de adquisición de nuevos clientes por mes"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en tendencia de adquisición: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/clients/analytics/most-profitable")
+async def get_most_profitable_clients(
+    limit: int = 20,
+    db: Session = Depends(get_database)
+):
+    """
+    Gráfico de barras: Clientes más rentables
+    Variables: Cliente, Venta, Costo
+    """
+    try:
+        # Consulta para obtener clientes más rentables (PostgreSQL)
+        query = text("""
+            SELECT 
+                cliente,
+                COALESCE(tipo_de_cliente, 'Sin tipo') as tipo_cliente,
+                COUNT(DISTINCT factura) as numero_facturas,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                SUM(COALESCE(costo, 0)) as total_costo,
+                SUM(COALESCE(mb, 0)) as margen_bruto,
+                CASE 
+                    WHEN SUM(COALESCE(venta, 0)) > 0 THEN
+                        ROUND((SUM(COALESCE(mb, 0)) / SUM(COALESCE(venta, 0))) * 100, 2)
+                    ELSE 0
+                END as rentabilidad_porcentaje,
+                AVG(COALESCE(venta, 0)) as venta_promedio
+            FROM client_data 
+            WHERE cliente IS NOT NULL AND cliente != ''
+            GROUP BY cliente, tipo_de_cliente
+            HAVING SUM(COALESCE(venta, 0)) > 0
+            ORDER BY margen_bruto DESC, total_ventas DESC
+            LIMIT :limit
+        """)
+        
+        result = db.execute(query, {"limit": limit}).fetchall()
+        
+        data = []
+        for row in result:
+            data.append({
+                "cliente": row.cliente,
+                "tipo_cliente": row.tipo_cliente,
+                "numero_facturas": row.numero_facturas,
+                "total_ventas": float(row.total_ventas),
+                "total_costo": float(row.total_costo),
+                "margen_bruto": float(row.margen_bruto),
+                "rentabilidad_porcentaje": float(row.rentabilidad_porcentaje),
+                "venta_promedio": float(row.venta_promedio)
+            })
+        
+        return {
+            "success": True,
+            "data": data,
+            "chart_type": "horizontal_bar",
+            "description": f"Top {limit} clientes más rentables"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en clientes rentables: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/clients/analytics/dashboard-summary")
+async def get_client_dashboard_summary(db: Session = Depends(get_database)):
+    """
+    Resumen ejecutivo para el dashboard de clientes
+    """
+    try:
+        # Estadísticas generales (PostgreSQL)
+        general_stats_query = text("""
+            SELECT 
+                COUNT(DISTINCT cliente) as total_clients,
+                COUNT(DISTINCT factura) as total_invoices,
+                SUM(COALESCE(venta, 0)) as total_sales,
+                SUM(COALESCE(mb, 0)) as total_mb,
+                AVG(
+                    CASE 
+                        WHEN COUNT(DISTINCT factura) > 1 THEN
+                            CAST(COUNT(DISTINCT factura) AS FLOAT) / 
+                            GREATEST(1, EXTRACT(days FROM (MAX(fecha::date) - MIN(fecha::date))) / 30.0)
+                        ELSE 0
+                    END
+                ) as avg_frequency
+            FROM (
+                SELECT 
+                    cliente,
+                    factura,
+                    fecha,
+                    venta,
+                    mb,
+                    COUNT(DISTINCT factura) OVER (PARTITION BY cliente) as client_invoices,
+                    MIN(fecha::date) OVER (PARTITION BY cliente) as first_date,
+                    MAX(fecha::date) OVER (PARTITION BY cliente) as last_date
+                FROM client_data 
+                WHERE cliente IS NOT NULL AND cliente != ''
+            ) subq
+        """)
+        
+        general_stats = db.execute(general_stats_query).fetchone()
+        
+        # Top ejecutivos
+        executives_query = text("""
+            SELECT 
+                COALESCE(comercial, 'Sin asignar') as ejecutivo,
+                COUNT(DISTINCT cliente) as num_clientes,
+                SUM(COALESCE(venta, 0)) as total_ventas,
+                COUNT(DISTINCT factura) as num_facturas
+            FROM client_data 
+            WHERE comercial IS NOT NULL AND comercial != ''
+            GROUP BY comercial
+            ORDER BY total_ventas DESC
+            LIMIT 8
+        """)
+        
+        executives_result = db.execute(executives_query).fetchall()
+        
+        # Top categorías
+        categories_query = text("""
+            SELECT 
+                COALESCE(categoria, 'Sin categoría') as categoria,
+                COUNT(DISTINCT cliente) as num_clientes,
+                SUM(COALESCE(venta, 0)) as total_ventas
+            FROM client_data 
+            WHERE categoria IS NOT NULL AND categoria != ''
+            GROUP BY categoria
+            ORDER BY total_ventas DESC
+            LIMIT 5
+        """)
+        
+        categories_result = db.execute(categories_query).fetchall()
+        
+        # Procesar resultados
+        executives_data = []
+        for row in executives_result:
+            executives_data.append({
+                "ejecutivo": row.ejecutivo,
+                "num_clientes": row.num_clientes,
+                "total_ventas": float(row.total_ventas),
+                "num_facturas": row.num_facturas
+            })
+        
+        categories_data = []
+        for row in categories_result:
+            categories_data.append({
+                "categoria": row.categoria,
+                "num_clientes": row.num_clientes,
+                "total_ventas": float(row.total_ventas)
+            })
+        
+        return {
+            "success": True,
+            "summary": {
+                "total_clients": general_stats.total_clients if general_stats else 0,
+                "total_invoices": general_stats.total_invoices if general_stats else 0,
+                "total_sales": float(general_stats.total_sales) if general_stats and general_stats.total_sales else 0,
+                "total_mb": float(general_stats.total_mb) if general_stats and general_stats.total_mb else 0,
+                "avg_frequency": float(general_stats.avg_frequency) if general_stats and general_stats.avg_frequency else 0
+            },
+            "top_executives": executives_data,
+            "top_categories": categories_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en dashboard summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint simplificado sin usar tabla clients (ya que no existe)
+@app.post("/clients/populate")
+async def populate_clients_table(db: Session = Depends(get_database)):
+    """
+    Poblar la tabla clients desde client_data para PostgreSQL
+    """
+    try:
+        # Verificar si ya existen datos en clients
+        existing_count_query = text("SELECT COUNT(*) FROM clients")
+        existing_count = db.execute(existing_count_query).scalar()
+        
+        if existing_count > 0:
+            return {
+                "success": True,
+                "message": f"Tabla clients ya tiene {existing_count} registros",
+                "existing_count": existing_count
+            }
+        
+        # Insertar clientes únicos desde client_data (PostgreSQL syntax)
+        insert_query = text("""
+            INSERT INTO clients (
+                client_name, client_type, executive, product, 
+                value, date, description
+            )
+            SELECT DISTINCT
+                COALESCE(cliente, 'Sin nombre') as client_name,
+                COALESCE(tipo_de_cliente, 'Sin tipo') as client_type,
+                COALESCE(comercial, 'Sin ejecutivo') as executive,
+                COALESCE(articulo, 'Sin producto') as product,
+                COALESCE(venta, 0) as value,
+                COALESCE(
+                    TO_TIMESTAMP(fecha, 'YYYY-MM-DD'), 
+                    CURRENT_TIMESTAMP
+                ) as date,
+                'Migrado desde client_data - ' || COALESCE(factura, 'Sin factura') as description
+            FROM client_data 
+            WHERE cliente IS NOT NULL AND cliente != ''
+            LIMIT 5000
+        """)
+        
+        result = db.execute(insert_query)
+        db.commit()
+        
+        new_count = result.rowcount
+        
+        return {
+            "success": True,
+            "message": f"Se agregaron {new_count} registros a la tabla clients",
+            "inserted_count": new_count
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error poblando tabla clients: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/clients")
+async def get_clients_count(db: Session = Depends(get_database)):
+    """
+    Verificar conteo de la tabla clients
+    """
+    try:
+        count_query = text("SELECT COUNT(*) FROM clients")
+        count = db.execute(count_query).scalar()
+        
+        return {
+            "success": True,
+            "total_count": count,
+            "message": f"Tabla clients tiene {count} registros"
+        }
+    except Exception as e:
+        logger.error(f"Error verificando tabla clients: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
