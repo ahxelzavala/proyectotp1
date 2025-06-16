@@ -1,3 +1,26 @@
+# ===== AGREGAR ESTOS IMPORTS AL INICIO DE main.py =====
+from ml_service import ml_service
+from pydantic import BaseModel
+from typing import Optional
+
+# ===== MODELOS PYDANTIC PARA ML =====
+class PredictionRequest(BaseModel):
+    client_ids: Optional[List[int]] = None
+    threshold: Optional[float] = None
+    limit: Optional[int] = 100
+
+class SingleClientPrediction(BaseModel):
+    cliente: str
+    venta: float
+    costo: float
+    mb: float
+    cantidad: float
+    tipo_de_cliente: str
+    categoria: str
+    comercial: Optional[str] = None
+    proveedor: Optional[str] = None
+    threshold: Optional[float] = None
+
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -2056,3 +2079,224 @@ async def get_pareto_analysis(period: str = "12m", db: Session = Depends(get_dat
     except Exception as e:
         logger.error(f"Error en análisis de Pareto: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/ml/status")
+async def get_ml_status():
+    """Verificar el estado del modelo de ML"""
+    try:
+        model_info = ml_service.get_model_info()
+        return {
+            "success": True,
+            "model_info": model_info,
+            "message": "Modelo cargado correctamente" if model_info.get("loaded") else "Modelo no disponible"
+        }
+    except Exception as e:
+        logger.error(f"Error verificando estado ML: {str(e)}")
+        return {
+            "success": False,
+            "model_info": {"loaded": False},
+            "message": f"Error: {str(e)}"
+        }
+
+@app.get("/ml/cross-sell-recommendations")
+async def get_cross_sell_recommendations(
+    limit: int = 50,
+    min_probability: float = 0.5,
+    db: Session = Depends(get_database)
+):
+    """Obtener recomendaciones de venta cruzada filtradas"""
+    try:
+        # Verificar que el modelo esté cargado
+        if not ml_service.is_loaded:
+            return {
+                "success": False,
+                "message": "Modelo de ML no disponible",
+                "recommendations": []
+            }
+        
+        # Obtener clientes activos (con ventas recientes)
+        query = text("""
+            SELECT DISTINCT
+                id, cliente, venta, costo, mb, cantidad,
+                tipo_de_cliente, categoria, comercial, proveedor,
+                fecha
+            FROM client_data 
+            WHERE cliente IS NOT NULL AND cliente != ''
+                AND venta IS NOT NULL AND venta > 0
+                AND fecha IS NOT NULL
+            ORDER BY venta DESC
+            LIMIT :limit
+        """)
+        
+        result = db.execute(query, {"limit": limit * 2}).fetchall()
+        
+        if not result:
+            return {
+                "success": False,
+                "message": "No se encontraron clientes activos",
+                "recommendations": []
+            }
+        
+        # Convertir a formato para ML
+        client_data = []
+        for row in result:
+            client_dict = {
+                "id": row.id,
+                "cliente": row.cliente,
+                "venta": float(row.venta or 0),
+                "costo": float(row.costo or 0),
+                "mb": float(row.mb or 0),
+                "cantidad": float(row.cantidad or 0),
+                "tipo_de_cliente": row.tipo_de_cliente or "Unknown",
+                "categoria": row.categoria or "Unknown",
+                "comercial": row.comercial or "Unknown",
+                "proveedor": row.proveedor or "Unknown",
+                "fecha": row.fecha
+            }
+            client_data.append(client_dict)
+        
+        # Realizar predicciones
+        all_predictions = ml_service.predict_cross_sell(client_data)
+        
+        # Filtrar por probabilidad mínima y recomendaciones positivas
+        filtered_recommendations = [
+            pred for pred in all_predictions 
+            if pred['prediction'] == 1 and pred['probability'] >= min_probability
+        ]
+        
+        # Ordenar por probabilidad descendente
+        filtered_recommendations.sort(key=lambda x: x['probability'], reverse=True)
+        
+        # Limitar resultados
+        final_recommendations = filtered_recommendations[:limit]
+        
+        return {
+            "success": True,
+            "message": f"Se encontraron {len(final_recommendations)} recomendaciones de alta calidad",
+            "total_evaluated": len(client_data),
+            "total_positive": len([p for p in all_predictions if p['prediction'] == 1]),
+            "high_quality_recommendations": len(final_recommendations),
+            "min_probability_filter": min_probability,
+            "recommendations": final_recommendations
+        }
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo recomendaciones: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "recommendations": []
+        }
+
+@app.post("/ml/predict-cross-sell")
+async def predict_cross_sell_batch(
+    request: PredictionRequest,
+    db: Session = Depends(get_database)
+):
+    """Predicciones de venta cruzada en lote"""
+    try:
+        # Verificar que el modelo esté cargado
+        if not ml_service.is_loaded:
+            return {
+                "success": False,
+                "message": "Modelo de ML no disponible",
+                "predictions": []
+            }
+        
+        # Construir query base
+        query = db.query(ClientData)
+        
+        # Filtrar por client_ids si se especifican
+        if request.client_ids:
+            query = query.filter(ClientData.id.in_(request.client_ids))
+        
+        # Aplicar límite
+        clients = query.limit(request.limit).all()
+        
+        if not clients:
+            return {
+                "success": False,
+                "message": "No se encontraron clientes para procesar",
+                "total_clients": 0,
+                "predictions": []
+            }
+        
+        # Convertir a formato para ML
+        client_data = []
+        for client in clients:
+            client_dict = {
+                "id": client.id,
+                "cliente": client.cliente or "Unknown",
+                "venta": float(client.venta or 0),
+                "costo": float(client.costo or 0),
+                "mb": float(client.mb or 0),
+                "cantidad": float(client.cantidad or 0),
+                "tipo_de_cliente": client.tipo_de_cliente or "Unknown",
+                "categoria": client.categoria or "Unknown",
+                "comercial": client.comercial or "Unknown",
+                "proveedor": client.proveedor or "Unknown"
+            }
+            client_data.append(client_dict)
+        
+        # Realizar predicciones
+        predictions = ml_service.predict_cross_sell(client_data, request.threshold)
+        
+        # Estadísticas
+        total_predictions = len(predictions)
+        positive_predictions = sum(1 for p in predictions if p['prediction'] == 1)
+        avg_probability = sum(p['probability'] for p in predictions) / total_predictions if total_predictions > 0 else 0
+        
+        return {
+            "success": True,
+            "message": f"Predicciones completadas para {total_predictions} clientes",
+            "total_clients": total_predictions,
+            "predictions": predictions,
+            "statistics": {
+                "positive_predictions": positive_predictions,
+                "positive_rate": round((positive_predictions / total_predictions) * 100, 2) if total_predictions > 0 else 0,
+                "average_probability": round(avg_probability, 4),
+                "threshold_used": request.threshold or ml_service.model_metadata.get('threshold', 0.4)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en predicción batch: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "predictions": []
+        }
+
+@app.get("/ml/model-performance")
+async def get_model_performance():
+    """Obtener métricas de rendimiento del modelo"""
+    try:
+        if not ml_service.is_loaded:
+            return {
+                "success": False,
+                "message": "Modelo no disponible",
+                "performance": {}
+            }
+        
+        model_info = ml_service.get_model_info()
+        feature_importance = ml_service.get_feature_importance()
+        
+        return {
+            "success": True,
+            "performance": {
+                "model_version": model_info.get('model_version', 'Unknown'),
+                "training_date": model_info.get('training_date', 'Unknown'),
+                "threshold": model_info.get('threshold', 0.4),
+                "metrics": model_info.get('metrics', {}),
+                "feature_importance": feature_importance[:10]  # Top 10 features
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo performance: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "performance": {}
+        }
