@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  LineChart, Line, ComposedChart 
+  LineChart, Line, ComposedChart, Cell
 } from 'recharts';
 import './Products.css';
 import Sidebar from './Sidebar';
@@ -12,11 +12,10 @@ const Products = ({ userRole, onLogout }) => {
   const [rotationData, setRotationData] = useState([]);
   const [paretoData, setParetoData] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [selectedPeriod, setSelectedPeriod] = useState('12m');
 
   useEffect(() => {
     fetchAllData();
-  }, [selectedPeriod]);
+  }, []);
 
   const fetchAllData = async () => {
     setDataLoading(true);
@@ -36,7 +35,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchComparativeData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/comparative-bars?period=${selectedPeriod}&limit=10`);
+      const response = await fetch(`http://localhost:8000/products/analytics/comparative-bars?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setComparativeData(data.data || []);
@@ -48,7 +47,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchTrendData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/trend-lines?top_products=6&period=${selectedPeriod}`);
+      const response = await fetch(`http://localhost:8000/products/analytics/trend-lines?top_products=6`);
       if (response.ok) {
         const data = await response.json();
         setTrendData(data.data || []);
@@ -60,14 +59,14 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchRotationData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/rotation-speed?period=${selectedPeriod}&limit=10`);
+      const response = await fetch(`http://localhost:8000/products/analytics/rotation-speed?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setRotationData(data.data || []);
       }
     } catch (error) {
       console.error('Error fetching rotation data:', error);
-      // Simular datos de rotación si no existe el endpoint
+      // Mantener datos de ejemplo si el endpoint no funciona
       setRotationData([
         { producto: 'NATROSOL 250 LR - 25 KG', velocidad_rotacion: 8.5, categoria: 'Rápida' },
         { producto: 'BYK 037 - 185 KG', velocidad_rotacion: 7.2, categoria: 'Rápida' },
@@ -83,7 +82,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchParetoData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/pareto-80-20?period=${selectedPeriod}`);
+      const response = await fetch(`http://localhost:8000/products/analytics/pareto-80-20`);
       if (response.ok) {
         const data = await response.json();
         setParetoData(data.data || []);
@@ -157,27 +156,30 @@ const Products = ({ userRole, onLogout }) => {
     rank: index + 1
   }));
 
-  // Preparar datos de rotación con nombres cortos
-  const rotationChartData = rotationData.slice(0, 8).map(item => ({
-    ...item,
-    producto_corto: item.producto?.length > 15 ? item.producto.substring(0, 15) + '...' : item.producto,
-    color: item.categoria === 'Rápida' ? '#27ae60' : item.categoria === 'Media' ? '#f39c12' : '#e74c3c'
-  }));
+  // Preparar datos de rotación con nombres cortos y colores individuales
+  const rotationChartData = rotationData.slice(0, 8).map(item => {
+    let color;
+    if (item.categoria === 'Rápida' || item.velocidad_rotacion >= 6.0) {
+      color = '#27ae60';
+    } else if (item.categoria === 'Media' || (item.velocidad_rotacion >= 3.0 && item.velocidad_rotacion < 6.0)) {
+      color = '#f39c12';
+    } else {
+      color = '#e74c3c';
+    }
+    
+    return {
+      ...item,
+      producto_corto: item.producto?.length > 15 ? item.producto.substring(0, 15) + '...' : item.producto,
+      color: color,
+      categoria: item.categoria || (item.velocidad_rotacion >= 6.0 ? 'Rápida' : item.velocidad_rotacion >= 3.0 ? 'Media' : 'Lenta')
+    };
+  });
 
   // Preparar datos comparativos con nombres cortos
   const comparativeChartData = comparativeData.slice(0, 8).map(item => ({
     ...item,
     producto_corto: item.producto?.length > 12 ? item.producto.substring(0, 12) + '...' : item.producto
   }));
-
-  const getPeriodLabel = () => {
-    switch(selectedPeriod) {
-      case '3m': return 'Últimos 3 meses';
-      case '6m': return 'Últimos 6 meses';
-      case '12m': return 'Últimos 12 meses';
-      default: return 'Período seleccionado';
-    }
-  };
 
   if (dataLoading) {
     return (
@@ -187,7 +189,7 @@ const Products = ({ userRole, onLogout }) => {
           <div className="loading-container">
             <div className="loading-spinner"></div>
             <p>Cargando análisis de productos...</p>
-            <p>Aplicando filtros de {getPeriodLabel().toLowerCase()}...</p>
+            <p>Procesando datos...</p>
           </div>
         </div>
       </div>
@@ -200,22 +202,9 @@ const Products = ({ userRole, onLogout }) => {
       <div className="dashboard-content">
         <div className="products-container">
           
-          {/* Header Simple como en Clientes */}
+          {/* Header Simple */}
           <div className="page-header">
             <h1 className="titulo">Análisis de Productos</h1>
-          </div>
-          
-          {/* Period Selector */}
-          <div className="period-selector-container">
-            <select 
-              value={selectedPeriod} 
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="period-selector"
-            >
-              <option value="3m">Últimos 3 meses</option>
-              <option value="6m">Últimos 6 meses</option>
-              <option value="12m">Últimos 12 meses</option>
-            </select>
           </div>
 
           {/* Charts Grid - 4 Gráficos */}
@@ -224,14 +213,14 @@ const Products = ({ userRole, onLogout }) => {
             {/* 1. Top Productos por Ventas */}
             <div className="chart-section">
               <h3>🏆 Top Productos por Ventas</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={comparativeChartData} margin={{ top: 20, right: 30, left: 20, bottom: 120 }}>
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={comparativeChartData} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="producto_corto" 
                     angle={-45} 
                     textAnchor="end" 
-                    height={120}
+                    height={100}
                     fontSize={10}
                     interval={0}
                     tick={{ fontSize: 10 }}
@@ -246,6 +235,8 @@ const Products = ({ userRole, onLogout }) => {
                             <p className="label">{data.producto}</p>
                             <p style={{ color: '#8884d8' }}>{`Ventas: ${formatCurrency(data.total_ventas)}`}</p>
                             <p style={{ color: '#82ca9d' }}>{`Margen: ${formatCurrency(data.total_margen)}`}</p>
+                            <p>{`Facturas: ${data.num_facturas || 'N/A'}`}</p>
+                            <p>{`Clientes: ${data.num_clientes || 'N/A'}`}</p>
                           </div>
                         );
                       }
@@ -257,6 +248,37 @@ const Products = ({ userRole, onLogout }) => {
                   <Bar dataKey="total_margen" fill="#82ca9d" name="Margen Bruto" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+              
+              {/* Estadísticas adicionales */}
+              <div className="chart-stats">
+                <div className="stat-item">
+                  <span className="stat-label">💰 Total Ventas:</span>
+                  <span className="stat-value">
+                    {formatCurrency(comparativeChartData.reduce((sum, item) => sum + (item.total_ventas || 0), 0))}
+                  </span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">📈 Total Margen:</span>
+                  <span className="stat-value">
+                    {formatCurrency(comparativeChartData.reduce((sum, item) => sum + (item.total_margen || 0), 0))}
+                  </span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">🏆 Mejor Producto:</span>
+                  <span className="stat-value">
+                    {comparativeChartData[0]?.producto_corto || 'N/A'}
+                  </span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">📊 Rentabilidad Promedio:</span>
+                  <span className="stat-value">
+                    {comparativeChartData.length > 0 
+                      ? `${((comparativeChartData.reduce((sum, item) => sum + ((item.total_margen || 0) / (item.total_ventas || 1)), 0) / comparativeChartData.length) * 100).toFixed(1)}%`
+                      : 'N/A'
+                    }
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* 2. Tendencias de Ventas */}
@@ -293,14 +315,14 @@ const Products = ({ userRole, onLogout }) => {
             {/* 3. Velocidad de Rotación */}
             <div className="chart-section">
               <h3>⚡ Velocidad de Rotación</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={rotationChartData} margin={{ top: 20, right: 30, left: 20, bottom: 120 }}>
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={rotationChartData} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="producto_corto" 
                     angle={-45} 
                     textAnchor="end" 
-                    height={120}
+                    height={100}
                     fontSize={10}
                     interval={0}
                   />
@@ -315,8 +337,12 @@ const Products = ({ userRole, onLogout }) => {
                         return (
                           <div className="custom-tooltip">
                             <p className="label">{data.producto}</p>
-                            <p style={{ color: data.color }}>{`Velocidad: ${data.velocidad_rotacion.toFixed(1)} rotaciones/mes`}</p>
+                            <p style={{ color: data.color }}>
+                              {`Velocidad: ${data.velocidad_rotacion.toFixed(1)} rotaciones/mes`}
+                            </p>
                             <p>{`Categoría: ${data.categoria}`}</p>
+                            <p>{`Facturas: ${data.total_facturas || 'N/A'}`}</p>
+                            <p>{`Clientes únicos: ${data.clientes_unicos || 'N/A'}`}</p>
                           </div>
                         );
                       }
@@ -325,16 +351,60 @@ const Products = ({ userRole, onLogout }) => {
                   />
                   <Bar 
                     dataKey="velocidad_rotacion" 
-                    fill="#4ECDC4"
                     radius={[6, 6, 0, 0]}
                     name="Velocidad de Rotación"
-                  />
+                  >
+                    {rotationChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              <div style={{ textAlign: 'center', marginTop: '15px', fontSize: '12px', color: '#666' }}>
-                <span style={{ color: '#27ae60', fontWeight: 'bold' }}>● Rápida (&gt;6)</span>{' '}
-                <span style={{ color: '#f39c12', fontWeight: 'bold' }}>● Media (3-6)</span>{' '}
-                <span style={{ color: '#e74c3c', fontWeight: 'bold' }}>● Lenta (&lt;3)</span>
+              
+              {/* Estadísticas y leyenda mejorada */}
+              <div className="rotation-summary">
+                <div className="rotation-categories">
+                  <div className="category-item rapid">
+                    <span className="category-dot rapid"></span>
+                    <span className="category-text">
+                      <strong>Rápida (&gt;6.0)</strong>
+                      <small>{rotationChartData.filter(item => item.categoria === 'Rápida').length} productos</small>
+                    </span>
+                  </div>
+                  <div className="category-item medium">
+                    <span className="category-dot medium"></span>
+                    <span className="category-text">
+                      <strong>Media (3.0-6.0)</strong>
+                      <small>{rotationChartData.filter(item => item.categoria === 'Media').length} productos</small>
+                    </span>
+                  </div>
+                  <div className="category-item slow">
+                    <span className="category-dot slow"></span>
+                    <span className="category-text">
+                      <strong>Lenta (&lt;3.0)</strong>
+                      <small>{rotationChartData.filter(item => item.categoria === 'Lenta').length} productos</small>
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="rotation-stats">
+                  <div className="stat-group">
+                    <span className="stat-label">📊 Velocidad Promedio:</span>
+                    <span className="stat-value">
+                      {rotationChartData.length > 0 
+                        ? `${(rotationChartData.reduce((sum, item) => sum + item.velocidad_rotacion, 0) / rotationChartData.length).toFixed(1)} rot/mes`
+                        : 'N/A'
+                      }
+                    </span>
+                  </div>
+                  <div className="stat-group">
+                    <span className="stat-label">🏆 Más Rápido:</span>
+                    <span className="stat-value">
+                      {rotationChartData[0]?.producto_corto || 'N/A'} 
+                      ({rotationChartData[0]?.velocidad_rotacion.toFixed(1) || '0'})
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
