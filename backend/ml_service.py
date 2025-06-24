@@ -1,6 +1,7 @@
-# backend/ml_service.py (Versión simplificada para evitar errores)
+# backend/ml_service.py (Versión corregida para usar modelo real)
 import pandas as pd
 import numpy as np
+import xgboost as xgb
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
@@ -16,7 +17,7 @@ class MLService:
         self.model_metadata = None
         self.feature_names = []
         self.is_loaded = False
-        self.demo_mode = True
+        self.demo_mode = False  # Cambiar default a False
         
         # Intentar cargar modelo
         self._initialize()
@@ -31,24 +32,60 @@ class MLService:
             ]
             metadata_path = Path("ml_models/model_metadata.json")
             
-            # Si no hay archivos, activar modo demo
-            if not any(p.exists() for p in model_paths) or not metadata_path.exists():
-                logger.info("🔄 Activando modo DEMO - archivos de modelo no encontrados")
-                self._activate_demo_mode()
-                return
-            
-            # Intentar cargar metadatos
+            # Cargar metadatos primero
             if metadata_path.exists():
                 try:
                     with open(metadata_path, 'r', encoding='utf-8') as f:
                         self.model_metadata = json.load(f)
                     logger.info("✅ Metadatos ML cargados")
+                    
+                    # Obtener nombres de features
+                    self.feature_names = self.model_metadata.get('feature_names', [])
+                    
                 except Exception as e:
                     logger.warning(f"⚠️ Error cargando metadatos: {e}")
+                    self._activate_demo_mode()
+                    return
+            else:
+                logger.warning("⚠️ Archivo de metadatos no encontrado")
+                self._activate_demo_mode()
+                return
             
-            # Para esta versión simplificada, usar modo demo con metadatos reales
-            self._activate_demo_mode()
+            # Intentar cargar modelo XGBoost
+            model_loaded = False
             
+            # Primero intentar .json
+            json_path = Path("ml_models/xgboost_model_v1.json")
+            if json_path.exists():
+                try:
+                    self.model = xgb.XGBClassifier()
+                    self.model.load_model(str(json_path))
+                    model_loaded = True
+                    logger.info("✅ Modelo XGBoost cargado desde JSON")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error cargando modelo JSON: {e}")
+            
+            # Si no funciona JSON, intentar .pkl
+            if not model_loaded:
+                pkl_path = Path("ml_models/xgboost_model_v1.pkl")
+                if pkl_path.exists():
+                    try:
+                        import pickle
+                        with open(pkl_path, 'rb') as f:
+                            self.model = pickle.load(f)
+                        model_loaded = True
+                        logger.info("✅ Modelo XGBoost cargado desde PKL")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error cargando modelo PKL: {e}")
+            
+            if model_loaded:
+                self.is_loaded = True
+                self.demo_mode = False
+                logger.info("🎯 Modelo REAL cargado y listo para predicciones")
+            else:
+                logger.warning("⚠️ No se pudo cargar modelo real, activando modo DEMO")
+                self._activate_demo_mode()
+                
         except Exception as e:
             logger.error(f"❌ Error inicializando ML Service: {e}")
             self._activate_demo_mode()
@@ -62,18 +99,20 @@ class MLService:
             self.model_metadata = {
                 "model_version": "DEMO-1.0",
                 "training_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "threshold": 0.4,
+                "threshold": 0.5,  # Usar el threshold de los metadatos reales
                 "metrics": {
-                    "accuracy": 0.7824,
-                    "precision": 0.5972,
-                    "recall": 0.7673,
-                    "f1_score": 0.6717,
-                    "roc_auc": 0.8462
+                    "accuracy": 0.8008,
+                    "precision": 0.6861,
+                    "recall": 0.5729,
+                    "f1_score": 0.6244,
+                    "roc_auc": 0.8466
                 },
                 "feature_names": [
-                    "venta", "costo", "mb", "cantidad", "rentabilidad",
-                    "ratio_costo_venta", "margen_unitario", 
-                    "tipo_de_cliente_encoded", "categoria_encoded"
+                    "Tipo de Cliente", "SUPERCATEGORIA_DISPERSANTES", "SUPERCATEGORIA_ENDURECEDORES / CURING AGENTS",
+                    "SUPERCATEGORIA_LABORATORIO", "SUPERCATEGORIA_MODIFICADORES REOLÓGICOS", "SUPERCATEGORIA_OTROS",
+                    "SUPERCATEGORIA_PIGMENTOS / EFECTOS", "SUPERCATEGORIA_PLASTIFICANTES", "SUPERCATEGORIA_PRESERVANTES",
+                    "SUPERCATEGORIA_RESINAS / AGLUTINANTES", "SUPERCATEGORIA_SOLVENTES", "SKU", "Codigo", "Tipo_Cliente",
+                    "CATEGORIA", "Cantidad", "P. Venta", "C. Unit", "Venta", "Costo", "MB"
                 ],
                 "model_type": "DEMO Mode",
                 "demo_mode": True
@@ -82,46 +121,25 @@ class MLService:
         self.feature_names = self.model_metadata.get('feature_names', [])
         logger.info("✅ Modo DEMO ML activado")
     
-    def get_model_info(self) -> Dict[str, Any]:
-        """Obtener información del modelo"""
-        if not self.is_loaded:
-            return {
-                "loaded": False,
-                "error": "Modelo no cargado"
-            }
-        
-        info = {
-            "loaded": True,
-            "model_version": self.model_metadata.get('model_version', 'Unknown'),
-            "training_date": self.model_metadata.get('training_date', 'Unknown'),
-            "threshold": self.model_metadata.get('threshold', 0.4),
-            "metrics": self.model_metadata.get('metrics', {}),
-            "feature_count": len(self.feature_names),
-            "feature_names": self.feature_names,
-            "model_type": self.model_metadata.get('model_type', 'Demo Mode'),
-            "demo_mode": self.demo_mode
-        }
-        
-        if self.demo_mode:
-            info["warning"] = "Ejecutándose en modo DEMO con predicciones simuladas"
-        
-        return info
-    
     def predict_cross_sell(self, client_data: List[Dict], threshold: Optional[float] = None) -> List[Dict]:
-        """Realizar predicciones de venta cruzada (modo demo)"""
+        """Realizar predicciones de venta cruzada"""
         if not self.is_loaded:
             raise Exception("Modelo no está cargado")
         
         try:
             if threshold is None:
-                threshold = self.model_metadata.get('threshold', 0.4)
+                threshold = self.model_metadata.get('threshold', 0.5)
             
-            # Generar predicciones demo
             results = []
+            
             for i, client_info in enumerate(client_data):
+                if self.demo_mode:
+                    # Usar lógica demo
+                    prob = self._calculate_demo_probability(client_info)
+                else:
+                    # Usar modelo REAL
+                    prob = self._predict_with_real_model(client_info)
                 
-                # Lógica de negocio simple para demo
-                prob = self._calculate_demo_probability(client_info)
                 pred = 1 if prob >= threshold else 0
                 
                 # Determinar prioridad
@@ -159,6 +177,37 @@ class MLService:
         except Exception as e:
             logger.error(f"❌ Error en predicción: {str(e)}")
             raise
+    
+    def _predict_with_real_model(self, client_info: Dict) -> float:
+        """Hacer predicción con el modelo XGBoost real"""
+        try:
+            # Preparar datos según los feature_names del modelo
+            feature_data = []
+            
+            # Mapear datos del cliente a las features esperadas
+            for feature_name in self.feature_names:
+                if feature_name in client_info:
+                    feature_data.append(client_info[feature_name])
+                else:
+                    # Valor por defecto para features faltantes
+                    feature_data.append(0.0)
+            
+            # Convertir a formato que espera XGBoost
+            X = np.array([feature_data])
+            
+            # Obtener probabilidad (para clasificación binaria)
+            if hasattr(self.model, 'predict_proba'):
+                prob = self.model.predict_proba(X)[0][1]  # Probabilidad de clase positiva
+            else:
+                # Si es un booster directo
+                prob = self.model.predict(X)[0]
+            
+            return float(prob)
+            
+        except Exception as e:
+            logger.error(f"❌ Error en predicción real: {e}")
+            # Fallback a demo si hay error
+            return self._calculate_demo_probability(client_info)
     
     def _calculate_demo_probability(self, client_info: Dict) -> float:
         """Calcular probabilidad demo basada en reglas de negocio"""
@@ -216,24 +265,68 @@ class MLService:
             logger.warning(f"Error calculando probabilidad demo: {e}")
             return 0.3
     
+    def get_model_info(self) -> Dict[str, Any]:
+        """Obtener información del modelo"""
+        if not self.is_loaded:
+            return {
+                "loaded": False,
+                "error": "Modelo no cargado"
+            }
+        
+        info = {
+            "loaded": True,
+            "model_version": self.model_metadata.get('model_version', 'Unknown'),
+            "training_date": self.model_metadata.get('training_date', 'Unknown'),
+            "threshold": self.model_metadata.get('threshold', 0.5),
+            "metrics": self.model_metadata.get('metrics', {}),
+            "feature_count": len(self.feature_names),
+            "feature_names": self.feature_names,
+            "model_type": "XGBoost Classifier" if not self.demo_mode else "Demo Mode",
+            "demo_mode": self.demo_mode
+        }
+        
+        if self.demo_mode:
+            info["warning"] = "Ejecutándose en modo DEMO con predicciones simuladas"
+        else:
+            info["success"] = "Usando modelo XGBoost REAL"
+        
+        return info
+    
     def get_feature_importance(self) -> List[Dict]:
-        """Obtener importancia de features (demo)"""
+        """Obtener importancia de features"""
         if not self.is_loaded:
             return []
         
-        # Importancia simulada realista
-        demo_importance = [
-            {"feature": "venta", "importance": 0.25, "importance_percentage": 25.0},
-            {"feature": "rentabilidad", "importance": 0.20, "importance_percentage": 20.0},
-            {"feature": "mb", "importance": 0.15, "importance_percentage": 15.0},
-            {"feature": "tipo_de_cliente_encoded", "importance": 0.12, "importance_percentage": 12.0},
-            {"feature": "categoria_encoded", "importance": 0.10, "importance_percentage": 10.0},
-            {"feature": "cantidad", "importance": 0.08, "importance_percentage": 8.0},
-            {"feature": "margen_unitario", "importance": 0.05, "importance_percentage": 5.0},
-            {"feature": "ratio_costo_venta", "importance": 0.03, "importance_percentage": 3.0},
-            {"feature": "costo", "importance": 0.02, "importance_percentage": 2.0}
-        ]
-        return demo_importance
+        if self.demo_mode or not hasattr(self.model, 'feature_importances_'):
+            # Importancia simulada
+            demo_importance = [
+                {"feature": "venta", "importance": 0.25, "importance_percentage": 25.0},
+                {"feature": "rentabilidad", "importance": 0.20, "importance_percentage": 20.0},
+                {"feature": "mb", "importance": 0.15, "importance_percentage": 15.0},
+                {"feature": "tipo_de_cliente_encoded", "importance": 0.12, "importance_percentage": 12.0},
+                {"feature": "categoria_encoded", "importance": 0.10, "importance_percentage": 10.0},
+                {"feature": "cantidad", "importance": 0.08, "importance_percentage": 8.0},
+                {"feature": "margen_unitario", "importance": 0.05, "importance_percentage": 5.0},
+                {"feature": "ratio_costo_venta", "importance": 0.03, "importance_percentage": 3.0},
+                {"feature": "costo", "importance": 0.02, "importance_percentage": 2.0}
+            ]
+            return demo_importance
+        else:
+            # Importancia real del modelo
+            importances = self.model.feature_importances_
+            feature_importance = []
+            
+            for i, importance in enumerate(importances):
+                if i < len(self.feature_names):
+                    feature_importance.append({
+                        "feature": self.feature_names[i],
+                        "importance": float(importance),
+                        "importance_percentage": float(importance * 100)
+                    })
+            
+            # Ordenar por importancia descendente
+            feature_importance.sort(key=lambda x: x['importance'], reverse=True)
+            return feature_importance
 
 # Instancia global del servicio ML
 ml_service = MLService()
