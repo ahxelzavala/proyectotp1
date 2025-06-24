@@ -23,7 +23,7 @@
   box-sizing: border-box;
 }
 
-/* Header Simple como en Clientes */
+/* Header Simple centrado */
 .page-header {
   text-align: center;
   margin-bottom: 30px;
@@ -47,53 +47,17 @@
   font-weight: 400;
 }
 
-/* Period Selector */
-.period-selector-container {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 25px;
-  align-items: center;
-  gap: 10px;
-}
-
-.period-selector-container::before {
-  content: "📅 Período: ";
-  font-weight: 600;
-  color: #495057;
-}
-
-.period-selector {
-  padding: 10px 16px;
-  border: 2px solid #e9ecef;
-  border-radius: 8px;
-  background: white;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.period-selector:focus {
-  outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
-}
-
-.period-selector:hover {
-  border-color: #007bff;
-  transform: translateY(-1px);
-}
-
-/* Chart Sections */
+/* Chart Sections - Espaciado optimizado */
 .chart-section {
   background: white;
-  padding: 25px;
+  padding: 20px;
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   margin-bottom: 25px;
   border: 1px solid #e9ecef;
   transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-section:hover {
@@ -103,26 +67,153 @@
 
 .chart-section h3 {
   color: #2c3e50;
-  margin-bottom: 25px;
+  margin-bottom: 15px;
   font-size: 1.4rem;
   font-weight: 600;
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   border-bottom: 3px solid #3498db;
   padding-bottom: 12px;
+  flex-shrink: 0;
 }
 
-/* Charts Grid Layout */
+/* Estadísticas adicionales para llenar espacio vacío */
+.chart-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+  padding: 15px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 8px;
+  border-left: 4px solid #3498db;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #6c757d;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 14px;
+  color: #2c3e50;
+  font-weight: 700;
+}
+
+/* Estilos para velocidad de rotación mejorados */
+.rotation-summary {
+  margin-top: 15px;
+  padding: 15px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 8px;
+  border-left: 4px solid #17a2b8;
+}
+
+.rotation-categories {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.category-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.category-dot.rapid {
+  background-color: #27ae60;
+}
+
+.category-dot.medium {
+  background-color: #f39c12;
+}
+
+.category-dot.slow {
+  background-color: #e74c3c;
+}
+
+.category-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.category-text strong {
+  font-size: 11px;
+  color: #2c3e50;
+  line-height: 1.2;
+}
+
+.category-text small {
+  font-size: 9px;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
+.rotation-stats {
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid #dee2e6;
+  padding-top: 12px;
+}
+
+.stat-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.stat-group .stat-label {
+  font-size: 11px;
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+
+.stat-group .stat-value {
+  font-size: 13px;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+/* Charts Grid Layout - Mejor espaciado */
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 25px;
   margin-top: 20px;
+  width: 100%;
 }
 
 @media (min-width: 1200px) {
   .charts-grid {
     grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: auto auto;
   }
 }
 
@@ -132,7 +223,7 @@
   }
   
   .chart-section {
-    padding: 30px;
+    padding: 25px;
   }
 }
 
@@ -146,6 +237,7 @@
   backdrop-filter: blur(10px);
   border-left: 4px solid #3498db;
   max-width: 300px;
+  z-index: 1000;
 }
 
 .custom-tooltip .label {
@@ -284,21 +376,12 @@
   }
   
   .chart-section {
-    padding: 20px;
+    padding: 15px;
   }
   
   .chart-section h3 {
     font-size: 1.2rem;
-    margin-bottom: 20px;
-  }
-  
-  .period-selector-container {
-    justify-content: center;
-    margin-bottom: 20px;
-  }
-  
-  .period-selector-container::before {
-    display: none;
+    margin-bottom: 15px;
   }
   
   /* Ajustes para gráficos en móvil */
@@ -322,17 +405,29 @@
   }
   
   .chart-section {
-    padding: 15px;
+    padding: 12px;
   }
   
   .chart-section h3 {
     font-size: 1.1rem;
+    flex-wrap: wrap;
+    text-align: center;
   }
   
   .custom-tooltip {
     font-size: 11px;
     padding: 10px;
     max-width: 220px;
+  }
+  
+  .custom-tooltip .label {
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  
+  .custom-tooltip p {
+    font-size: 10px;
+    margin: 2px 0;
   }
   
   .page-header .titulo {
@@ -394,12 +489,6 @@
   outline-offset: 2px;
 }
 
-.period-selector:focus {
-  outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
-}
-
 /* Estilos específicos para indicadores de categorías */
 .rotation-indicator {
   display: inline-block;
@@ -421,38 +510,9 @@
   background-color: #e74c3c;
 }
 
-/* Mejoras adicionales para tooltips */
-.custom-tooltip {
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid #e9ecef;
-  border-radius: 12px;
-  padding: 15px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(10px);
-  border-left: 4px solid #3498db;
-  max-width: 300px;
-  z-index: 1000;
-}
-
 /* Asegurar que los textos de los ejes no se corten */
 .recharts-cartesian-axis-tick-value {
   overflow: visible !important;
-}
-
-/* Mejoras para el layout del grid */
-.charts-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 25px;
-  margin-top: 20px;
-  width: 100%;
-}
-
-@media (min-width: 1200px) {
-  .charts-grid {
-    grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: auto auto;
-  }
 }
 
 /* Asegurar que las barras tengan buen espaciado */
@@ -469,49 +529,7 @@
   font-size: 10px;
 }
 
-/* Mejoras para el período selector */
-.period-selector-container {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 25px;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 768px) {
-  .period-selector-container {
-    justify-content: center;
-    margin-bottom: 20px;
-  }
-}
-
 /* Estilos para asegurar que los gráficos se vean bien en todos los tamaños */
 .chart-section .recharts-wrapper {
   width: 100% !important;
-}
-
-/* Mejoras finales para mobile */
-@media (max-width: 480px) {
-  .chart-section h3 {
-    font-size: 1.1rem;
-    flex-wrap: wrap;
-    text-align: center;
-  }
-  
-  .custom-tooltip {
-    max-width: 200px;
-    font-size: 10px;
-    padding: 8px;
-  }
-  
-  .custom-tooltip .label {
-    font-size: 11px;
-    margin-bottom: 6px;
-  }
-  
-  .custom-tooltip p {
-    font-size: 10px;
-    margin: 2px 0;
-  }
 }
