@@ -7,7 +7,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # Base de datos
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:ben10ultimatealien@localhost:5432/anders_db")
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://dev:sernazavala2025@34.58.203.106:5432/anders_db")
     
     # Configuración de correo
     mail_username: str = os.getenv("MAIL_USERNAME", "")
