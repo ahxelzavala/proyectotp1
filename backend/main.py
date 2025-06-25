@@ -10,6 +10,8 @@ from datetime import datetime
 import logging
 import traceback
 import json
+import uvicorn
+import os
 from pathlib import Path
 
 # Importar modelos y configuración
@@ -3469,3 +3471,15 @@ async def get_comerciales_from_csv(db: Session = Depends(get_database)):
             "error": f"Error procesando comerciales: {str(e)}",
             "comerciales": []
         }
+
+if __name__ == "__main__":
+    
+# Puerto para Cloud Run (debe ser 8080 o usar PORT env var)
+    port = int(os.environ.get("PORT", 8080))
+    
+uvicorn.run(
+    app, 
+    host="0.0.0.0", 
+    port=port,
+    log_level="info"
+)
