@@ -3473,13 +3473,15 @@ async def get_comerciales_from_csv(db: Session = Depends(get_database)):
         }
 
 if __name__ == "__main__":
+    import uvicorn
+    import os
     
-# Puerto para Cloud Run (debe ser 8080 o usar PORT env var)
+    # Puerto para Cloud Run (debe ser 8080 o usar PORT env var)
     port = int(os.environ.get("PORT", 8080))
     
-uvicorn.run(
-    app, 
-    host="0.0.0.0", 
-    port=port,
-    log_level="info"
-)
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port,
+        log_level="info"
+    )
