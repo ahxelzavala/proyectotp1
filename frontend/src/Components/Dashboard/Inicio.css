@@ -5,6 +5,10 @@
     min-height: 100vh;
   }
   
+  .file-input {
+    color: #333; /* Cambia el color del texto a gris oscuro/negro */
+  }
+
   .inicio-header {
     text-align: center;
     margin-bottom: 30px;
