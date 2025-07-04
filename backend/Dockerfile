@@ -1,16 +1,27 @@
-FROM python:3.11-slim
+﻿FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copia los archivos de requerimientos e instálalos
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements e instalar dependencias
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia el resto del código fuente
+# Copiar código fuente
 COPY . .
 
-# Expone el puerto de FastAPI
-EXPOSE 8000
+# Crear directorio para modelos ML
+RUN mkdir -p ml_models
 
-# Comando para arrancar el servidor
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Exponer puerto por defecto
+EXPOSE 8080
+
+# Cloud Run pasa PORT como variable de entorno
+# Usar script para manejar PORT dinámicamente
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}

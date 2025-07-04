@@ -12,6 +12,8 @@ const Products = ({ userRole, onLogout }) => {
   const [rotationData, setRotationData] = useState([]);
   const [paretoData, setParetoData] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
+  
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://proyectoreact-backend-741997725999.us-central1.run.app';
 
   useEffect(() => {
     fetchAllData();
@@ -35,7 +37,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchComparativeData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/comparative-bars?limit=10`);
+      const response = await fetch(`${API_BASE_URL}/products/analytics/comparative-bars?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setComparativeData(data.data || []);
@@ -47,7 +49,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchTrendData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/trend-lines?top_products=6`);
+      const response = await fetch(`${API_BASE_URL}/products/analytics/trend-lines?top_products=6`);
       if (response.ok) {
         const data = await response.json();
         setTrendData(data.data || []);
@@ -59,7 +61,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchRotationData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/rotation-speed?limit=10`);
+      const response = await fetch(`${API_BASE_URL}/products/analytics/rotation-speed?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setRotationData(data.data || []);
@@ -82,7 +84,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchParetoData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/pareto-80-20`);
+      const response = await fetch(`${API_BASE_URL}/products/analytics/pareto-80-20`);
       if (response.ok) {
         const data = await response.json();
         setParetoData(data.data || []);

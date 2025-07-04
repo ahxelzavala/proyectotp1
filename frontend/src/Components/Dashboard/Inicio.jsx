@@ -9,6 +9,8 @@ const Inicio = () => {
   const [recentUploads, setRecentUploads] = useState([]);
   const [dataStats, setDataStats] = useState(null);
 
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://proyectoreact-backend-741997725999.us-central1.run.app';
+
   // Cargar estadísticas al montar el componente
   useEffect(() => {
     loadDataStats();
@@ -16,7 +18,7 @@ const Inicio = () => {
 
   const loadDataStats = async () => {
     try {
-      const response = await fetch('http://localhost:8000/client-data');
+      const response = await fetch(`${API_BASE_URL}/client-data`);
       if (response.ok) {
         const data = await response.json();
         setDataStats({
@@ -92,7 +94,7 @@ const Inicio = () => {
         });
       }, 200);
 
-      const response = await fetch('http://localhost:8000/upload-csv', {
+      const response = await fetch(`${API_BASE_URL}/upload-csv`,  {
         method: 'POST',
         body: formData,
       });

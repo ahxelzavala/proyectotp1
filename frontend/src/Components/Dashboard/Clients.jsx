@@ -28,6 +28,8 @@ const Clients = ({ userRole, onLogout }) => {
   const [error, setError] = useState(null);
   const [acquisitionDebug, setAcquisitionDebug] = useState(null);
 
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://proyectoreact-backend-741997725999.us-central1.run.app';
+
   const COLORS = ['#8884D8', '#82CA9D', '#FFC658', '#FF7C7C', '#8DD1E1', '#D084D0'];
 
   // Cargar datos al montar el componente
@@ -39,7 +41,7 @@ const Clients = ({ userRole, onLogout }) => {
   const debugAcquisition = async () => {
     try {
       console.log('🔍 Ejecutando debug de adquisición...');
-      const response = await fetch('http://localhost:8000/debug/test-acquisition');
+      const response = await fetch(`${API_BASE_URL}/debug/test-acquisition`);
       if (response.ok) {
         const debugData = await response.json();
         console.log('🐛 Debug data:', debugData);
@@ -61,7 +63,7 @@ const Clients = ({ userRole, onLogout }) => {
       
       // Verificar conectividad del backend
       try {
-        const healthCheck = await fetch('http://localhost:8000/health');
+        const healthCheck = await fetch(`${API_BASE_URL}/health`);
         if (!healthCheck.ok) {
           throw new Error('Backend no disponible');
         }
@@ -75,11 +77,11 @@ const Clients = ({ userRole, onLogout }) => {
   
       // Endpoints para cargar datos
       const endpoints = [
-        'http://localhost:8000/clients/analytics/sales-by-type-detailed',
-        'http://localhost:8000/clients/analytics/acquisition-trend',
-        'http://localhost:8000/clients/analytics/top-profitable-detailed?limit=10'
+        `${API_BASE_URL}/clients/analytics/sales-by-type-detailed`,
+        `${API_BASE_URL}/clients/analytics/acquisition-trend`,
+        `${API_BASE_URL}/clients/analytics/top-profitable-detailed?limit=10`
       ];
-  
+
       const results = await Promise.allSettled(
         endpoints.map(async (url, index) => {
           try {
@@ -178,7 +180,7 @@ const Clients = ({ userRole, onLogout }) => {
     try {
       console.log('🔄 Intentando obtener datos desde client-type-analysis...');
       
-      const response = await fetch('http://localhost:8000/clients/analytics/client-type-analysis');
+      const response = await fetch(`${API_BASE_URL}/clients/analytics/client-type-analysis`);
       if (response.ok) {
         const data = await response.json();
         

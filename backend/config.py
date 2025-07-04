@@ -1,5 +1,3 @@
-
-
 import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
@@ -28,5 +26,6 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        extra = "allow"  # ESTA ES LA LÍNEA CLAVE - permite campos extra
 
 settings = Settings()
