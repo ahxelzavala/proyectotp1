@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaUserPlus, FaUsers, FaTrash, FaEdit } from 'react-icons/fa';
+import { FaUserPlus, FaUsers, FaTrash, FaEdit, FaTimes, FaCheckCircle } from 'react-icons/fa';
 import Sidebar from './Sidebar'; // Importa el Sidebar si no lo has hecho ya
 import './Configuration.css';
 

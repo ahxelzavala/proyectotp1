@@ -150,12 +150,14 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",  # Para desarrollo local
+        "https://*.vercel.app",    # Para todos los deploys de Vercel
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # ===== STARTUP EVENT =====
 @app.on_event("startup")
 async def startup_event():
@@ -1723,11 +1725,6 @@ async def get_top_profitable_detailed_using_tipo_cliente(
             "estadisticas": {}
         }
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-    # Agregar estos endpoints al archivo main.py del backend
 
 @app.get("/clients/analytics/client-type-analysis")
 async def get_client_type_analysis_postgresql(db: Session = Depends(get_database)):
@@ -3472,12 +3469,29 @@ async def get_comerciales_from_csv(db: Session = Depends(get_database)):
             "comerciales": []
         }
 
+
+@app.get("/clients/analytics/sales-by-type-detailed")
+async def get_sales_by_type_detailed(db: Session = Depends(get_database)):
+    return await get_sales_by_type_detailed_robust(db)
+
+@app.get("/clients/analytics/acquisition-trend")
+async def get_acquisition_trend(db: Session = Depends(get_database)):
+    return await get_acquisition_trend_fixed_final(db)
+
+@app.get("/clients/analytics/client-type-analysis")
+async def get_client_type_analysis(db: Session = Depends(get_database)):
+    return await get_client_type_analysis_postgresql(db)
+
+@app.get("/debug/test-acquisition")
+async def debug_test_acquisition_endpoint(db: Session = Depends(get_database)):
+    return await debug_test_acquisition(db)
+
 if __name__ == "__main__":
     import uvicorn
     import os
     
     # Puerto para Cloud Run (debe ser 8080 o usar PORT env var)
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 8000))
     
     uvicorn.run(
         app, 
