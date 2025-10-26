@@ -149,15 +149,16 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Antes del app.add_middleware
-origins_regex = r"https://proyectotp.*\.vercel\.app"
-
+# Esta versión permite cualquier variante de proyectotp*.vercel.app
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=origins_regex,
+    allow_origin_regex=r"https://(www\.)?proyectotp\d*\.vercel\.app",
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
+        "https://proyectotp.vercel.app",  # ← ESTA ES LA URL QUE FALTA
+        # O usa wildcard para todos:
+        "https://*.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
