@@ -1,3 +1,4 @@
+import config from '../../config';
 import React, { useState, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -35,7 +36,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchComparativeData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/comparative-bars?limit=10`);
+      const response = await fetch(`${config.API_URL}/products/analytics/comparative-bars?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setComparativeData(data.data || []);
@@ -47,7 +48,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchTrendData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/trend-lines?top_products=6`);
+      const response = await fetch(`${config.API_URL}/products/analytics/trend-lines?top_products=6`);
       if (response.ok) {
         const data = await response.json();
         setTrendData(data.data || []);
@@ -59,7 +60,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchRotationData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/rotation-speed?limit=10`);
+      const response = await fetch(`${config.API_URL}/products/analytics/rotation-speed?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setRotationData(data.data || []);
@@ -82,7 +83,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchParetoData = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/products/analytics/pareto-80-20`);
+      const response = await fetch(`${config.API_URL}/products/analytics/pareto-80-20`);
       if (response.ok) {
         const data = await response.json();
         setParetoData(data.data || []);

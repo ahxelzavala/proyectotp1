@@ -1,3 +1,4 @@
+import config from '../../config';
 import React, { useState, useEffect } from 'react';
 import './Analysis.css';
 import Sidebar from './Sidebar';
@@ -58,7 +59,7 @@ const Analysis = ({ userRole, onLogout }) => {
 const loadComerciales = async () => {
   try {
     console.log('🔍 Cargando comerciales del CSV real...');
-    const response = await fetch('http://localhost:8000/analytics/comerciales');
+    const response = await fetch(`${config.API_URL}/analytics/comerciales`);
     const data = await response.json();
     
     if (data.success && data.comerciales && data.comerciales.length > 0) {
@@ -80,8 +81,8 @@ const loadComerciales = async () => {
     setDataLoading(true);
     try {
       console.log('🔍 Cargando métricas REALES del CSV...');
-      
-      const response = await fetch('http://localhost:8000/analytics/summary');
+
+      const response = await fetch(`${config.API_URL}/analytics/summary`);
       const data = await response.json();
       
       if (data.success && data.summary) {
@@ -110,7 +111,7 @@ const loadComerciales = async () => {
   // Funciones para ML
   const checkMLStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/ml/status');
+      const response = await fetch(`${config.API_URL}/ml/status`);
       const data = await response.json();
       setMLStatus(data);
     } catch (error) {
@@ -123,8 +124,8 @@ const loadComerciales = async () => {
   const fetchMLMetrics = async () => {
     try {
       console.log('🤖 Cargando métricas REALES del modelo ML...');
-      
-      const response = await fetch('http://localhost:8000/ml/model-performance');
+
+      const response = await fetch(`${config.API_URL}/ml/model-performance`);
       const data = await response.json();
       
       if (data.success && data.performance && data.performance.metrics) {
@@ -164,8 +165,8 @@ const fetchMLRecommendations = async (comercialFilter = '') => {
   setMLError(null);
   try {
     console.log('🤖 Obteniendo recomendaciones REALES del CSV y modelo ML...');
-    
-    let url = 'http://localhost:8000/ml/cross-sell-recommendations?limit=200&min_probability=0.3';
+
+    let url = `${config.API_URL}/ml/cross-sell-recommendations?limit=200&min_probability=0.3`;
     if (comercialFilter && comercialFilter !== '') {
       url += `&comercial=${encodeURIComponent(comercialFilter)}`;
       console.log(`🔍 Filtrando por comercial: ${comercialFilter}`);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './Inicio.css';
+import config from '../../config';  // ← AGREGAR ESTA LÍNEA
 
 const Inicio = () => {
   const [file, setFile] = useState(null);
@@ -16,7 +17,8 @@ const Inicio = () => {
 
   const loadDataStats = async () => {
     try {
-      const response = await fetch('http://localhost:8000/client-data');
+      // CAMBIO AQUÍ ↓
+      const response = await fetch(`${config.API_URL}/client-data`);
       if (response.ok) {
         const data = await response.json();
         setDataStats({
@@ -92,7 +94,8 @@ const Inicio = () => {
         });
       }, 200);
 
-      const response = await fetch('http://localhost:8000/upload-csv', {
+      // CAMBIO AQUÍ ↓
+      const response = await fetch(`${config.API_URL}/upload-csv`, {
         method: 'POST',
         body: formData,
       });
