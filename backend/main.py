@@ -12,6 +12,7 @@ import traceback
 import json
 import uvicorn
 import os
+import re
 from pathlib import Path
 
 # Importar modelos y configuración
@@ -148,14 +149,15 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Configuración de CORS - Actualizar esta sección
+# Antes del app.add_middleware
+origins_regex = r"https://proyectotp.*\.vercel\.app"
+
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=origins_regex,
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
-        "https://proyectotp1.vercel.app",  # ← Tu URL de Vercel
-        "https://*.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
