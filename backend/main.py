@@ -148,16 +148,37 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# Configuración de CORS - Actualizar esta sección
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # Para desarrollo local
-        "https://*.vercel.app",    # Para todos los deploys de Vercel
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://*.vercel.app",  # Para todos los deploys de Vercel
+        "https://*.onrender.com",  # ← Agregar esto
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def read_root():
+    return {"message": "Sistema Anders API", "status": "running"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+@app.get("/")
+def read_root():
+    return {"message": "Sistema Anders API", "status": "running"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+
 # ===== STARTUP EVENT =====
 @app.on_event("startup")
 async def startup_event():
@@ -176,7 +197,7 @@ async def startup_event():
     if not migrate_add_new_columns():
         logger.warning("⚠️ No se pudieron agregar todas las columnas nuevas")
     
-    # Verificar ML Service
+    # Verificar ml Service
     if ML_AVAILABLE and ml_service.is_loaded:
         logger.info("✅ Sistema ML inicializado correctamente")
     else:
@@ -1517,9 +1538,6 @@ async def get_client_frequency_scatter(db: Session = Depends(get_database)):
         logger.error(f"Error en frecuencia scatter: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# AGREGAR ESTOS ENDPOINTS AL FINAL DE TU ARCHIVO main.py (antes del if __name__ == "__main__":)
-
-# REEMPLAZAR el endpoint con esta versión SIN ERRORES de f-string
 
 
 
@@ -3486,16 +3504,9 @@ async def get_client_type_analysis(db: Session = Depends(get_database)):
 async def debug_test_acquisition_endpoint(db: Session = Depends(get_database)):
     return await debug_test_acquisition(db)
 
-if __name__ == "__main__":
-    import uvicorn
-    import os
-    
-    # Puerto para Cloud Run (debe ser 8080 o usar PORT env var)
-    port = int(os.environ.get("PORT", 8000))
-    
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=port,
-        log_level="info"
-    )
+# Para desarrollo local
+# if __name__ == "__main__":
+#     import uvicorn
+#     import os
+#     port = int(os.environ.get("PORT", 8000))
+#     uvicorn.run(app, host="0.0.0.0", port=port)
