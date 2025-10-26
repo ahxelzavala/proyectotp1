@@ -13,8 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Cloud Run usa la variable PORT
+# Cloud Run inyecta la variable PORT
 ENV PORT=8080
 EXPOSE 8080
 
-CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT
+# IMPORTANTE: Usar la variable $PORT
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}

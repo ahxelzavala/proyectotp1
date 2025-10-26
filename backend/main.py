@@ -176,7 +176,7 @@ async def startup_event():
     if not migrate_add_new_columns():
         logger.warning("⚠️ No se pudieron agregar todas las columnas nuevas")
     
-    # Verificar ML Service
+    # Verificar ml Service
     if ML_AVAILABLE and ml_service.is_loaded:
         logger.info("✅ Sistema ML inicializado correctamente")
     else:
@@ -3485,17 +3485,7 @@ async def get_client_type_analysis(db: Session = Depends(get_database)):
 @app.get("/debug/test-acquisition")
 async def debug_test_acquisition_endpoint(db: Session = Depends(get_database)):
     return await debug_test_acquisition(db)
-
 if __name__ == "__main__":
     import uvicorn
-    import os
-    
-    # Puerto para Cloud Run (debe ser 8080 o usar PORT env var)
-    port = int(os.environ.get("PORT", 8000))
-    
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=port,
-        log_level="info"
-    )
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
