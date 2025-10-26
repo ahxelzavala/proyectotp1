@@ -1,16 +1,16 @@
-from pydantic import BaseSettings
+import os
+from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    MAIL_USERNAME: str = "your_email@gmail.com"
-    MAIL_PASSWORD: str = "your_app_specific_password"
-    MAIL_FROM: str = "your_email@gmail.com"
-    MAIL_PORT: int = 587
-    MAIL_SERVER: str = "smtp.gmail.com"
-    MAIL_TLS: bool = True
-    MAIL_SSL: bool = False
-    USE_CREDENTIALS: bool = True
-
+    # Para desarrollo local (opcional)
+    #local_database_url: str = "postgresql://postgres:ben10ultimatealien@localhost:5432/anders_db"
+    
+    # Para producción con Supabase
+    database_url: str = os.getenv("DATABASE_URL", "")
+    secret_key: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-prod")
+    
     class Config:
         env_file = ".env"
+
 
 settings = Settings()

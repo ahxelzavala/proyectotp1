@@ -1,88 +1,113 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { FaUserPlus, FaUsers, FaTrash, FaEdit, FaTimes, FaCheckCircle } from 'react-icons/fa';
+import Sidebar from './Sidebar'; // Importa el Sidebar si no lo has hecho ya
 import './Configuration.css';
 
 const Configuration = () => {
-  const [analysts, setAnalysts] = useState([]);
-  const [newEmail, setNewEmail] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [newAnalystEmail, setNewAnalystEmail] = useState('');
+  const [analysts, setAnalysts] = useState([
+    { id: 1, email: 'analyst1@company.com', name: 'Ana García', status: 'Activo' },
+    { id: 2, email: 'analyst2@company.com', name: 'Carlos López', status: 'Activo' },
+    { id: 3, email: 'analyst3@company.com', name: 'María Rodríguez', status: 'Inactivo' }
+  ]);
 
-  useEffect(() => {
-    fetchAnalysts();
-  }, []);
-
-  const fetchAnalysts = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/analysts');
-      const data = await response.json();
-      setAnalysts(data);
-    } catch (error) {
-      setError('Error al cargar los analistas');
+  const handleAddAnalyst = () => {
+    if (newAnalystEmail.trim()) {
+      const newAnalyst = {
+        id: analysts.length + 1,
+        email: newAnalystEmail,
+        name: 'Nuevo Analista',
+        status: 'Pendiente'
+      };
+      setAnalysts([...analysts, newAnalyst]);
+      setNewAnalystEmail('');
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (!newEmail.endsWith('@anders.com')) {
-      setError('El correo debe ser del dominio @anders.com');
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:8000/analysts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: newEmail }),
-      });
-
-      if (response.ok) {
-        setSuccess('Analista agregado correctamente');
-        setNewEmail('');
-        fetchAnalysts();
-      } else {
-        const data = await response.json();
-        setError(data.detail || 'Error al agregar el analista');
-      }
-    } catch (error) {
-      setError('Error al conectar con el servidor');
-    }
+  const handleDeleteAnalyst = (id) => {
+    setAnalysts(analysts.filter(analyst => analyst.id !== id));
   };
 
   return (
-    <div className="configuration-container">
-      <h2>Configuración de Analistas</h2>
-      
-      <form onSubmit={handleSubmit} className="analyst-form">
-        <div className="input-group">
-          <input
-            type="email"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            placeholder="Correo del analista"
-            required
-          />
-          <button type="submit">Agregar Analista</button>
-        </div>
-        {error && <div className="error-message">{error}</div>}
-        {success && <div className="success-message">{success}</div>}
-      </form>
+    <div className="layout-container">
+      <Sidebar userRole="admin" onLogout={() => {}} /> {/* Sidebar importado */}
+      <div className="configuration-container">
+        <div className="configuration-content">
+          <h1 className="page-title">Configuración de Analistas</h1>
 
-      <div className="analysts-list">
-        <h3>Analistas Registrados</h3>
-        {analysts.length > 0 ? (
-          <ul>
-            {analysts.map((email, index) => (
-              <li key={index}>{email}</li>
-            ))}
-          </ul>
-        ) : (
-          <p>No hay analistas registrados</p>
-        )}
+          {/* Sección para agregar analista */}
+          <div className="section-card">
+            <div className="section-header">
+              <FaUserPlus className="section-icon" />
+              <h2>Agregar Nuevo Analista</h2>
+            </div>
+            <div className="section-body">
+              <div className="input-group">
+                <input
+                  type="email"
+                  className="analyst-input"
+                  placeholder="Correo del analista"
+                  value={newAnalystEmail}
+                  onChange={(e) => setNewAnalystEmail(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddAnalyst()}
+                />
+                <button
+                  className="add-analyst-btn"
+                  onClick={handleAddAnalyst}
+                  disabled={!newAnalystEmail.trim()}
+                >
+                  Agregar Analista
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Sección de analistas registrados */}
+          <div className="section-card">
+            <div className="section-header">
+              <FaUsers className="section-icon" />
+              <h2>Analistas Registrados</h2>
+              <span className="analysts-count">{analysts.length} analistas</span>
+            </div>
+            <div className="section-body">
+              {analysts.length === 0 ? (
+                <div className="empty-state">
+                  <p>No hay analistas registrados</p>
+                </div>
+              ) : (
+                <div className="analysts-table">
+                  <div className="table-header">
+                    <span>Nombre</span>
+                    <span>Email</span>
+                    <span>Estado</span>
+                    <span>Acciones</span>
+                  </div>
+                  {analysts.map(analyst => (
+                    <div key={analyst.id} className="analyst-row">
+                      <span className="analyst-name">{analyst.name}</span>
+                      <span className="analyst-email">{analyst.email}</span>
+                      <span className={`analyst-status ${analyst.status.toLowerCase()}`}>
+                        {analyst.status}
+                      </span>
+                      <div className="analyst-actions">
+                        <button className="action-btn edit-btn" title="Editar">
+                          <FaEdit />
+                        </button>
+                        <button
+                          className="action-btn delete-btn"
+                          title="Eliminar"
+                          onClick={() => handleDeleteAnalyst(analyst.id)}
+                        >
+                          <FaTrash />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

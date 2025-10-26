@@ -1,0 +1,383 @@
+/* Estilos generales para el contenedor de Inicio */
+.inicio-container {
+    padding: 20px;
+    background: #f7f9fc;
+    min-height: 100vh;
+  }
+  
+  .file-input {
+    color: #333; /* Cambia el color del texto a gris oscuro/negro */
+  }
+
+  .inicio-header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+  
+  .inicio-header h1 {
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #1a237e;
+    background: linear-gradient(135deg, #1a237e, #3f51b5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  
+  .subtitle {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 0;
+  }
+  
+  /* Grid de estadísticas */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 40px;
+  }
+  
+  .stat-card {
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  .stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+  }
+  
+  .stat-number {
+    font-size: 28px;
+    font-weight: bold;
+    color: #1a237e;
+    margin-bottom: 8px;
+  }
+  
+  .stat-label {
+    font-size: 14px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  /* Sección de carga de archivos */
+  .upload-section {
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 30px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  .upload-section h3 {
+    color: #333;
+    margin-bottom: 20px;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .upload-info {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 25px;
+    border-left: 4px solid #1a237e;
+  }
+  
+  .upload-info p {
+    margin: 0 0 10px 0;
+    font-weight: 600;
+    color: #333;
+  }
+  
+  .format-info {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  
+  .required {
+    color: #d32f2f;
+    font-weight: 600;
+  }
+  
+  .optional {
+    color: #1976d2;
+    font-weight: 600;
+  }
+  
+  /* Contenedor del input de archivo */
+  .file-input-container {
+    margin-bottom: 20px;
+  }
+  
+  .file-input {
+    width: 100%;
+    padding: 15px;
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: border-color 0.3s ease;
+    background-color: #fafafa;
+  }
+  
+  .file-input:hover {
+    border-color: #1a237e;
+    background-color: #f5f5f5;
+  }
+  
+  .file-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  /* Botones */
+  .file-input-buttons {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+  }
+  
+  .upload-button {
+    background: linear-gradient(135deg, #1a237e, #3f51b5);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 160px;
+    justify-content: center;
+  }
+  
+  .upload-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0d47a1, #1a237e);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(26, 35, 126, 0.3);
+  }
+  
+  .upload-button:disabled {
+    background: #cccccc;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+  
+  .upload-button.loading {
+    background: #1976d2;
+  }
+  
+  .clear-button {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+  }
+  
+  .clear-button:hover:not(:disabled) {
+    background-color: #d32f2f;
+  }
+  
+  /* Spinner para loading */
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ffffff40;
+    border-top: 2px solid #ffffff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  /* Barra de progreso */
+  .progress-container {
+    margin: 20px 0;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+  
+  .progress-bar {
+    flex: 1;
+    height: 8px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #1a237e, #3f51b5);
+    transition: width 0.3s ease;
+  }
+  
+  .progress-text {
+    font-weight: 600;
+    color: #1a237e;
+    min-width: 40px;
+  }
+  
+  /* Mensajes de estado */
+  .message {
+    margin-top: 20px;
+    padding: 15px 20px;
+    border-radius: 8px;
+    font-weight: 500;
+    animation: slideIn 0.3s ease;
+  }
+  
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .message.success {
+    background-color: #e8f5e8;
+    color: #2e7d32;
+    border-left: 4px solid #4caf50;
+  }
+  
+  .message.error {
+    background-color: #ffebee;
+    color: #c62828;
+    border-left: 4px solid #f44336;
+  }
+  
+  .message.info {
+    background-color: #e3f2fd;
+    color: #1565c0;
+    border-left: 4px solid #2196f3;
+  }
+  
+  /* Uploads recientes */
+  .recent-uploads {
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 30px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  .recent-uploads h3 {
+    color: #333;
+    margin-bottom: 20px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .uploads-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .upload-item {
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #ddd;
+    background-color: #f9f9f9;
+  }
+  
+  .upload-item.success {
+    border-left-color: #4caf50;
+    background-color: #f1f8e9;
+  }
+  
+  .upload-item.error {
+    border-left-color: #f44336;
+    background-color: #ffebee;
+  }
+  
+  .upload-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    background: none;
+    padding: 0;
+    border: none;
+  }
+  
+  .upload-filename {
+    font-weight: 600;
+    color: #333;
+  }
+  
+  .upload-timestamp {
+    font-size: 12px;
+    color: #666;
+  }
+  
+  .upload-message {
+    font-size: 14px;
+    color: #555;
+  }
+  
+  /* Sección de ayuda */
+  .help-section {
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  .help-section h3 {
+    color: #333;
+    margin-bottom: 15px;
+    font-size: 18px;
+    display: flex;
+  }
+  
+  .help-item {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* Estilo para pantallas pequeñas */
+  @media (max-width: 768px) {
+    .upload-section {
+      width: 80%;
+    }
+  }
+  
