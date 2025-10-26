@@ -149,30 +149,23 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Esta versión permite cualquier variante de proyectotp*.vercel.app
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://(www\.)?proyectotp\d*\.vercel\.app",
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
-        "https://proyectotp.vercel.app",  # ← ESTA ES LA URL QUE FALTA
-        # O usa wildcard para todos:
-        "https://*.vercel.app",
+        "https://proyectotp1.vercel.app",
+        "https://proyectotp2.vercel.app",
+        "https://proyectotp11.vercel.app",
+        "https://proyectotp.vercel.app",
+        "https://proyectotp4.vercel.app",
+        "*",  # Temporal para debugging
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.get("/")
-def read_root():
-    return {"message": "Sistema Anders API", "status": "running"}
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
-
 @app.get("/")
 def read_root():
     return {"message": "Sistema Anders API", "status": "running"}
