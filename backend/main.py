@@ -176,7 +176,7 @@ async def startup_event():
     if not migrate_add_new_columns():
         logger.warning("⚠️ No se pudieron agregar todas las columnas nuevas")
     
-    # Verificar ML Service
+    # Verificar ml Service
     if ML_AVAILABLE and ml_service.is_loaded:
         logger.info("✅ Sistema ML inicializado correctamente")
     else:
