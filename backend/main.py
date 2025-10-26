@@ -155,6 +155,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:5173",
         "https://*.vercel.app",  # Para todos los deploys de Vercel
+        "https://*.onrender.com",  # ← Agregar esto
     ],
     allow_credentials=True,
     allow_methods=["*"],
