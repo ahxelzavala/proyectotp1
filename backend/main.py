@@ -169,6 +169,14 @@ def read_root():
 def health_check():
     return {"status": "healthy"}
 
+@app.get("/")
+def read_root():
+    return {"message": "Sistema Anders API", "status": "running"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
 
 # ===== STARTUP EVENT =====
 @app.on_event("startup")
@@ -1529,9 +1537,6 @@ async def get_client_frequency_scatter(db: Session = Depends(get_database)):
         logger.error(f"Error en frecuencia scatter: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# AGREGAR ESTOS ENDPOINTS AL FINAL DE TU ARCHIVO main.py (antes del if __name__ == "__main__":)
-
-# REEMPLAZAR el endpoint con esta versión SIN ERRORES de f-string
 
 
 
