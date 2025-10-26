@@ -148,16 +148,28 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# Configuración de CORS - Actualizar esta sección
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # Para desarrollo local
-        "https://*.vercel.app",    # Para todos los deploys de Vercel
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://*.vercel.app",  # Para todos los deploys de Vercel
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def read_root():
+    return {"message": "Sistema Anders API", "status": "running"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+
 # ===== STARTUP EVENT =====
 @app.on_event("startup")
 async def startup_event():
@@ -3485,7 +3497,10 @@ async def get_client_type_analysis(db: Session = Depends(get_database)):
 @app.get("/debug/test-acquisition")
 async def debug_test_acquisition_endpoint(db: Session = Depends(get_database)):
     return await debug_test_acquisition(db)
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+
+# Para desarrollo local
+# if __name__ == "__main__":
+#     import uvicorn
+#     import os
+#     port = int(os.environ.get("PORT", 8000))
+#     uvicorn.run(app, host="0.0.0.0", port=port)
