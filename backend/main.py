@@ -3485,17 +3485,7 @@ async def get_client_type_analysis(db: Session = Depends(get_database)):
 @app.get("/debug/test-acquisition")
 async def debug_test_acquisition_endpoint(db: Session = Depends(get_database)):
     return await debug_test_acquisition(db)
-
 if __name__ == "__main__":
     import uvicorn
-    import os
-    
-    # Puerto para Cloud Run (debe ser 8080 o usar PORT env var)
-    port = int(os.environ.get("PORT", 8000))
-    
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=port,
-        log_level="info"
-    )
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
