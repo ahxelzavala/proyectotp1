@@ -5,17 +5,22 @@ WORKDIR /app
 # Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
     gcc \
-    postgresql-client \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Copiar e instalar dependencias
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
+# Copiar el código
 COPY . .
 
-# Cloud Run inyecta la variable PORT
+# Variables de entorno
+ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
+
 EXPOSE 8080
 
-# IMPORTANTE: Usar la variable $PORT
-CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
+# Comando de inicio - asegurar que use la variable PORT de Cloud Run
+CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
