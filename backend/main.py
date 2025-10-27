@@ -158,7 +158,7 @@ app.add_middleware(
         "https://proyectotp1.vercel.app",
         "https://proyectotp2.vercel.app",
         "https://proyectotp11.vercel.app",
-        "https://proyectotp.vercel.app",
+        "https://proyectotp10.vercel.app",
         "https://proyectotp22.vercel.app",
         "*",  # Temporal para debugging
     ],
