@@ -13,7 +13,6 @@ import json
 import uvicorn
 import os
 import re
-import traceback
 from pathlib import Path
 
 # Importar modelos y configuración
