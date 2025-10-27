@@ -2630,8 +2630,6 @@ async def get_top_products_6_postgresql():
         }
 
 
-
-
         # 1. Modificar comparative-bars existente:
 @app.get("/products/analytics/comparative-bars")
 async def get_products_comparative_bars(
