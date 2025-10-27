@@ -14,9 +14,9 @@ const Products = ({ userRole, onLogout }) => {
   const [trendData, setTrendData] = useState([]);
   const [rotationData, setRotationData] = useState([]);
   const [paretoData, setParetoData] = useState([]);
+  const [topProducts, setTopProducts] = useState([]); 
   const [dataLoading, setDataLoading] = useState(true);
 
-  const [topProducts, setTopProducts] = useState([]);
   const [loadingComparative, setLoadingComparative] = useState(false);
   const [loadingTop, setLoadingTop] = useState(false);
   const [loadingTrend, setLoadingTrend] = useState(false);
@@ -59,7 +59,7 @@ const Products = ({ userRole, onLogout }) => {
   const fetchComparativeData = async () => {
     try {
       
-      const response = await fetch(`${config.API_URL}/products/analytics/comparative-bars?limit=10`);
+      const response = await fetch(`${API_URL}/products/analytics/comparative-bars?limit=10`);
       if (response.ok) {
         const data = await response.json();
         setComparativeData(data.data || []);
@@ -99,7 +99,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchTrendData = async () => {
     try {
-      const response = await fetch(`${config.API_URL}/products/analytics/trend-lines?top_products=6`);
+      const response = await fetch(`${API_URL}/products/analytics/trend-lines?top_products=6`);
       if (response.ok) {
         const data = await response.json();
         setTrendData(data.data || []);
@@ -111,7 +111,8 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchRotationData = async () => {
     try {
-      const response = await fetch(`${config.API_URL}/products/analytics/rotation-speed?limit=10`);
+      const response = await fetch(`${API_URL}/products/analytics/rotation-speed`);
+
       if (response.ok) {
         const data = await response.json();
         setRotationData(data.data || []);
@@ -134,7 +135,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchParetoData = async () => {
     try {
-      const response = await fetch(`${config.API_URL}/products/analytics/pareto-80-20`);
+      const response = await fetch(`${API_URL}/products/analytics/pareto-80-20`);
       if (response.ok) {
         const data = await response.json();
         setParetoData(data.data || []);
