@@ -13,6 +13,7 @@ import json
 import uvicorn
 import os
 import re
+import traceback
 from pathlib import Path
 
 # Importar modelos y configuración
@@ -159,7 +160,7 @@ app.add_middleware(
         "https://proyectotp2.vercel.app",
         "https://proyectotp11.vercel.app",
         "https://proyectotp.vercel.app",
-        "https://proyectotp4.vercel.app",
+        "https://proyectotp22.vercel.app",
         "*",  # Temporal para debugging
     ],
     allow_credentials=True,
@@ -2571,6 +2572,65 @@ async def debug_test_acquisition(db: Session = Depends(get_database)):
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+
+
+
+@app.get("/products/analytics/top_products_6")
+async def get_top_products_6_postgresql():
+    """Obtiene los top 6 productos más vendidos desde PostgreSQL"""
+    try:
+        db = SessionLocal()
+        try:
+            logger.info("🔍 Obteniendo top 6 productos desde PostgreSQL...")
+            
+            result = db.execute(text("""
+                SELECT 
+                    product,
+                    SUM(value) as total_sales,
+                    SUM(value - cost) as total_margin,
+                    COUNT(*) as quantity,
+                    AVG(value) as avg_sale
+                FROM client_data
+                WHERE product IS NOT NULL 
+                  AND value IS NOT NULL
+                  AND value > 0
+                GROUP BY product
+                ORDER BY total_sales DESC
+                LIMIT 6
+            """))
+            
+            products = []
+            for row in result:
+                products.append({
+                    "product": row[0],
+                    "total_sales": float(row[1]) if row[1] else 0,
+                    "total_margin": float(row[2]) if row[2] else 0,
+                    "quantity": int(row[3]),
+                    "avg_sale": float(row[4]) if row[4] else 0
+                })
+            
+            logger.info(f"✅ Top 6 productos obtenidos: {len(products)} productos")
+            
+            return {
+                "success": True,
+                "products": products,
+                "total": len(products)
+            }
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo top 6 productos: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return {
+            "success": False,
+            "products": [],
+            "error": str(e)
+        }
+
+
+
 
         # 1. Modificar comparative-bars existente:
 @app.get("/products/analytics/comparative-bars")

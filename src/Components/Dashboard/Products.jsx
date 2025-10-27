@@ -7,6 +7,8 @@ import {
 import './Products.css';
 import Sidebar from './Sidebar';
 
+const API_URL = config.API_URL;
+
 const Products = ({ userRole, onLogout }) => {
   const [comparativeData, setComparativeData] = useState([]);
   const [trendData, setTrendData] = useState([]);
@@ -14,8 +16,28 @@ const Products = ({ userRole, onLogout }) => {
   const [paretoData, setParetoData] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
 
+  const [topProducts, setTopProducts] = useState([]);
+  const [loadingComparative, setLoadingComparative] = useState(false);
+  const [loadingTop, setLoadingTop] = useState(false);
+  const [loadingTrend, setLoadingTrend] = useState(false);
+  const [loadingRotation, setLoadingRotation] = useState(false);
+  const [loadingPareto, setLoadingPareto] = useState(false);
+
+
+  // Métricas generales
+  const [metrics, setMetrics] = useState({
+    totalSales: 0,
+    totalMargin: 0,
+    bestProduct: 'N/A',
+    avgProfitability: 0
+  });
+
   useEffect(() => {
     fetchAllData();
+        loadComparativeBars();
+    loadTopProducts();
+    loadTrendData();
+
   }, []);
 
   const fetchAllData = async () => {
@@ -36,6 +58,7 @@ const Products = ({ userRole, onLogout }) => {
 
   const fetchComparativeData = async () => {
     try {
+      
       const response = await fetch(`${config.API_URL}/products/analytics/comparative-bars?limit=10`);
       if (response.ok) {
         const data = await response.json();
@@ -45,6 +68,34 @@ const Products = ({ userRole, onLogout }) => {
       console.error('Error fetching comparative data:', error);
     }
   };
+
+  const loadComparativeBars = async () => {
+  try {
+    setLoadingComparative(true);
+    // CAMBIO: Quitar :1 del final
+    const response = await fetch(`${API_URL}/products/analytics/comparative-bars?limit=10`);
+    
+    if (!response.ok) {
+      throw new Error('Error cargando datos comparativos');
+    }
+    
+    const data = await response.json();
+    console.log('📊 Datos comparative-bars:', data);
+    
+    // Verificar que haya datos
+    if (data && Array.isArray(data) && data.length > 0) {
+      setComparativeData(data);
+    } else {
+      console.warn('⚠️ No hay datos para comparative-bars');
+      setComparativeData([]);
+    }
+  } catch (error) {
+    console.error('Error loading comparative data:', error);
+    setComparativeData([]);
+  } finally {
+    setLoadingComparative(false);
+  }
+};
 
   const fetchTrendData = async () => {
     try {
@@ -175,6 +226,69 @@ const Products = ({ userRole, onLogout }) => {
       categoria: item.categoria || (item.velocidad_rotacion >= 6.0 ? 'Rápida' : item.velocidad_rotacion >= 3.0 ? 'Media' : 'Lenta')
     };
   });
+
+
+const loadTopProducts = async () => {
+  try {
+    setLoadingTop(true);
+    // CAMBIO: Quitar :1 y usar endpoint correcto
+    const response = await fetch(`${API_URL}/products/analytics/top_products_6`);
+    
+    if (!response.ok) {
+      throw new Error('Error cargando top productos');
+    }
+    
+    const data = await response.json();
+    console.log('🏆 Datos top productos:', data);
+    
+    // Verificar formato de respuesta
+    if (data && data.products && Array.isArray(data.products)) {
+      setTopProducts(data.products);
+    } else if (Array.isArray(data)) {
+      setTopProducts(data);
+    } else {
+      console.warn('⚠️ No hay datos para top productos');
+      setTopProducts([]);
+    }
+  } catch (error) {
+    console.error('Error loading top products:', error);
+    setTopProducts([]);
+  } finally {
+    setLoadingTop(false);
+  }
+};
+
+
+
+const loadTrendData = async () => {
+  try {
+    setLoadingTrend(true);
+    // CAMBIO: Quitar :1
+    const response = await fetch(`${API_URL}/products/analytics/trend-lines`);
+    
+    if (!response.ok) {
+      throw new Error('Error cargando tendencias');
+    }
+    
+    const data = await response.json();
+    console.log('📈 Datos tendencias:', data);
+    
+    if (data && data.trends && Array.isArray(data.trends)) {
+      setTrendData(data.trends);
+    } else if (Array.isArray(data)) {
+      setTrendData(data);
+    } else {
+      console.warn('⚠️ No hay datos de tendencias');
+      setTrendData([]);
+    }
+  } catch (error) {
+    console.error('Error loading trend data:', error);
+    setTrendData([]);
+  } finally {
+    setLoadingTrend(false);
+  }
+};
+
 
   // Preparar datos comparativos con nombres cortos
   const comparativeChartData = comparativeData.slice(0, 8).map(item => ({
