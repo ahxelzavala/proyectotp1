@@ -2720,112 +2720,99 @@ async def get_products_comparative_bars(
 
 # ===== ENDPOINT 2: TREND LINES (CORREGIDO) =====
 @app.get("/products/analytics/trend-lines")
-async def get_products_trend_lines_fixed(
+async def get_products_trend_lines(
     top_products: int = 6,
     db: Session = Depends(get_database)
 ):
     """
-    Tendencias de ventas por mes - CORREGIDO PARA POSTGRESQL
+    Tendencias de ventas mensuales - POSTGRESQL COMPATIBLE
     """
     try:
-        logger.info(f"📈 Obteniendo tendencias para top {top_products} productos...")
+        logger.info(f"📈 [TREND] Obteniendo tendencias para top {top_products}...")
         
-        # Primero obtener los productos más vendidos
+        # 1. Obtener los productos más vendidos
         top_query = text("""
             SELECT 
                 COALESCE(articulo, 'Sin nombre') as producto,
-                SUM(
-                    CASE 
-                        WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
-                        THEN CAST(venta AS NUMERIC)
-                        ELSE 0
-                    END
-                ) as total_ventas
+                SUM(venta) as total_ventas
             FROM client_data
             WHERE articulo IS NOT NULL 
             AND TRIM(articulo) != ''
             AND fecha IS NOT NULL
+            AND venta IS NOT NULL
+            AND venta > 0
             GROUP BY articulo
-            HAVING SUM(
-                CASE 
-                    WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
-                    THEN CAST(venta AS NUMERIC)
-                    ELSE 0
-                END
-            ) > 0
+            HAVING SUM(venta) > 0
             ORDER BY total_ventas DESC
             LIMIT :limit_param
         """)
         
         top_result = db.execute(top_query, {"limit_param": top_products}).fetchall()
         
-        if not top_result:
-            return {
-                "success": False,
-                "message": "No se encontraron productos con datos válidos",
-                "data": []
-            }
+        if not top_result or len(top_result) == 0:
+            logger.warning("⚠️ [TREND] No se encontraron productos")
+            return []
         
         top_product_names = [row.producto for row in top_result]
+        logger.info(f"📋 [TREND] Top productos: {top_product_names[:3]}...")
         
-        # Obtener tendencias mensuales
+        # 2. Obtener tendencias mensuales para estos productos
         trend_query = text("""
             SELECT 
                 COALESCE(articulo, 'Sin nombre') as producto,
                 CASE 
-                    -- Formato YYYY-MM-DD
                     WHEN fecha ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN
                         SUBSTRING(fecha, 1, 7)
-                    -- Formato DD/MM/YYYY
                     WHEN fecha ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}' THEN
                         SUBSTRING(fecha, 7, 4) || '-' || SUBSTRING(fecha, 4, 2)
                     ELSE '2024-01'
                 END as mes,
-                
-                SUM(
-                    CASE 
-                        WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
-                        THEN CAST(venta AS NUMERIC)
-                        ELSE 0
-                    END
-                ) as ventas_mes,
-                
+                SUM(venta) as ventas_mes,
                 COUNT(DISTINCT factura) as facturas_mes
-                
             FROM client_data
             WHERE articulo = ANY(:product_names)
             AND fecha IS NOT NULL
+            AND venta IS NOT NULL
+            AND venta > 0
             GROUP BY articulo, mes
             ORDER BY mes ASC, ventas_mes DESC
         """)
         
         result = db.execute(trend_query, {"product_names": top_product_names}).fetchall()
         
+        logger.info(f"📊 [TREND] Query ejecutada: {len(result)} registros")
+        
+        if not result or len(result) == 0:
+            logger.warning("⚠️ [TREND] Sin datos de tendencia")
+            return []
+        
+        # 3. Formatear datos
         data = []
         for row in result:
             data.append({
                 "producto": row.producto,
                 "mes": row.mes,
                 "ventas_mes": float(row.ventas_mes or 0),
-                "facturas_mes": row.facturas_mes
+                "facturas_mes": int(row.facturas_mes or 0)
             })
         
-        logger.info(f"✅ {len(data)} registros de tendencia obtenidos")
+        # Log de muestra
+        if len(data) > 0:
+            logger.info(f"  ✅ Ejemplo: {data[0]['producto']} en {data[0]['mes']}: S/ {data[0]['ventas_mes']:,.2f}")
         
-        return {
-            "success": True,
-            "data": data,
-            "products_included": top_product_names,
-            "message": f"Tendencias para {len(top_product_names)} productos"
-        }
+        logger.info(f"✅ [TREND] Retornando {len(data)} registros de tendencia")
+        
+        # RETORNAR ARRAY DIRECTO
+        return data
         
     except Exception as e:
-        logger.error(f"❌ Error en trend-lines: {str(e)}")
-        return {
-            "success": False,
-            "message": f"Error: {str(e)}",
-            "data": []
-        }
+        logger.error(f"❌ [TREND] Error: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return []
+
+
+
+
 
 @app.get("/products/analytics/rotation-speed")
 async def get_rotation_speed(limit: int = 10, db: Session = Depends(get_database)):
