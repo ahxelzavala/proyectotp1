@@ -2631,25 +2631,24 @@ async def get_top_products_6_postgresql():
 
 # ===== ENDPOINT 1: COMPARATIVE BARS (CORREGIDO) =====
 @app.get("/products/analytics/comparative-bars")
-async def get_products_comparative_bars_fixed(
+async def get_products_comparative_bars_fixed_format(
     limit: int = 10,
     db: Session = Depends(get_database)
 ):
     """
-    Top productos por ventas - VERSIÓN CORREGIDA PARA POSTGRESQL
+    Top productos por ventas - FORMATO CORRECTO PARA FRONTEND
+    Devuelve: Array directo en "data" (no nested)
     """
     try:
-        logger.info(f"🔍 Obteniendo top {limit} productos...")
+        logger.info(f"🔍 Obteniendo top {limit} productos (formato frontend)...")
         
         # Verificar que hay datos
         total_check = db.execute(text("SELECT COUNT(*) FROM client_data")).scalar()
+        logger.info(f"📊 Total registros en DB: {total_check}")
+        
         if total_check == 0:
             logger.warning("⚠️ No hay datos en client_data")
-            return {
-                "success": False,
-                "message": "No hay datos cargados. Por favor, sube un archivo CSV.",
-                "data": []
-            }
+            return []  # Devolver array vacío directamente
         
         # Query corregida para PostgreSQL
         query = text("""
@@ -2658,88 +2657,89 @@ async def get_products_comparative_bars_fixed(
                 COALESCE(categoria, 'Sin categoría') as categoria,
                 COALESCE(proveedor, 'Sin proveedor') as proveedor,
                 
-                -- Ventas totales
-                ROUND(CAST(SUM(
-                    CASE 
-                        WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
-                        THEN CAST(venta AS NUMERIC)
-                        ELSE 0
-                    END
-                ) AS NUMERIC), 2) as total_ventas,
+                -- Ventas totales (conversión segura)
+                ROUND(COALESCE(
+                    SUM(
+                        CASE 
+                            WHEN venta ~ '^[0-9]+\.?[0-9]*$'
+                            THEN CAST(venta AS NUMERIC)
+                            ELSE 0
+                        END
+                    ), 0
+                )::NUMERIC, 2) as total_ventas,
                 
-                -- Margen total
-                ROUND(CAST(SUM(
-                    CASE 
-                        WHEN mb IS NOT NULL AND CAST(mb AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
-                        THEN CAST(mb AS NUMERIC)
-                        ELSE 0
-                    END
-                ) AS NUMERIC), 2) as total_margen,
+                -- Margen total (conversión segura)
+                ROUND(COALESCE(
+                    SUM(
+                        CASE 
+                            WHEN mb ~ '^[0-9]+\.?[0-9]*$'
+                            THEN CAST(mb AS NUMERIC)
+                            ELSE 0
+                        END
+                    ), 0
+                )::NUMERIC, 2) as total_margen,
                 
                 -- Métricas adicionales
                 COUNT(DISTINCT factura) as num_facturas,
                 COUNT(DISTINCT cliente) as num_clientes,
-                SUM(COALESCE(cantidad, 0)) as cantidad_total
+                ROUND(COALESCE(SUM(cantidad), 0)::NUMERIC, 2) as cantidad_total
                 
             FROM client_data
             WHERE articulo IS NOT NULL 
             AND TRIM(articulo) != ''
-            AND venta IS NOT NULL
+            AND articulo != 'N/A'
             GROUP BY articulo, categoria, proveedor
             HAVING SUM(
                 CASE 
-                    WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
+                    WHEN venta ~ '^[0-9]+\.?[0-9]*$'
                     THEN CAST(venta AS NUMERIC)
                     ELSE 0
                 END
-            ) > 0
+            ) > 100
             ORDER BY total_ventas DESC
             LIMIT :limit_param
         """)
         
         result = db.execute(query, {"limit_param": limit}).fetchall()
         
-        if not result:
-            logger.warning("⚠️ No se encontraron productos con ventas")
-            return {
-                "success": False,
-                "message": "No se encontraron productos con datos de ventas válidos",
-                "data": []
-            }
+        logger.info(f"📊 Query ejecutada, {len(result)} productos encontrados")
         
-        # Procesar resultados
+        if not result or len(result) == 0:
+            logger.warning("⚠️ No se encontraron productos con ventas válidas")
+            # Devolver array vacío si no hay datos
+            return []
+        
+        # Procesar resultados en el formato EXACTO que espera el frontend
         data = []
-        for row in result:
-            data.append({
+        for i, row in enumerate(result):
+            producto_data = {
                 "producto": row.producto,
                 "categoria": row.categoria,
                 "proveedor": row.proveedor,
                 "total_ventas": float(row.total_ventas or 0),
                 "total_margen": float(row.total_margen or 0),
-                "num_facturas": row.num_facturas,
-                "num_clientes": row.num_clientes,
+                "num_facturas": int(row.num_facturas or 0),
+                "num_clientes": int(row.num_clientes or 0),
                 "cantidad_total": float(row.cantidad_total or 0)
-            })
+            }
+            data.append(producto_data)
+            
+            # Log de los primeros 3 para debugging
+            if i < 3:
+                logger.info(f"  {i+1}. {row.producto}: S/ {row.total_ventas:,.2f}")
         
-        logger.info(f"✅ {len(data)} productos obtenidos exitosamente")
+        logger.info(f"✅ Devolviendo {len(data)} productos exitosamente")
         
-        return {
-            "success": True,
-            "data": data,
-            "total": len(data),
-            "message": f"Top {len(data)} productos obtenidos"
-        }
+        # IMPORTANTE: Devolver ARRAY DIRECTO (no wrapped en objeto)
+        # El frontend espera: [{ producto: "...", total_ventas: ... }, ...]
+        return data
         
     except Exception as e:
         logger.error(f"❌ Error en comparative-bars: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return {
-            "success": False,
-            "message": f"Error: {str(e)}",
-            "data": [],
-            "error_details": str(e)
-        }
-
+        logger.error(f"Traceback completo: {traceback.format_exc()}")
+        
+        # En caso de error, devolver array vacío
+        return []
 
         # 2. Modificar trend-lines existente:
 
