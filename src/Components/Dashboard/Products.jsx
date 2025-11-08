@@ -98,16 +98,50 @@ const Products = ({ userRole, onLogout }) => {
 };
 
   const fetchTrendData = async () => {
-    try {
-      const response = await fetch(`${API_URL}/products/analytics/trend-lines?top_products=6`);
-      if (response.ok) {
-        const data = await response.json();
-        setTrendData(data.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching trend data:', error);
+  setLoadingTrend(true);
+  try {
+    console.log('📈 [TREND-FRONTEND] Llamando trend-lines...');
+    
+    const response = await fetch(
+      `${API_URL}/products/analytics/trend-lines?top_products=6`
+    );
+    
+    console.log('📡 [TREND-FRONTEND] Status:', response.status);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
-  };
+    
+    const data = await response.json();
+    console.log('📊 [TREND-FRONTEND] Data recibida:', data);
+    console.log('📊 [TREND-FRONTEND] Es array?', Array.isArray(data));
+    console.log('📊 [TREND-FRONTEND] Length:', data?.length);
+    
+    // Backend devuelve array directo
+    if (Array.isArray(data) && data.length > 0) {
+      console.log('✅ [TREND-FRONTEND] Seteando', data.length, 'registros');
+      console.log('📋 [TREND-FRONTEND] Primeros 3:', data.slice(0, 3));
+      setTrendData(data);
+    } else if (data && data.trends && Array.isArray(data.trends)) {
+      // Por si acaso viene en formato {trends: [...]}
+      console.log('✅ [TREND-FRONTEND] Usando data.trends');
+      setTrendData(data.trends);
+    } else if (data && data.data && Array.isArray(data.data)) {
+      // Por si acaso viene en formato {data: [...]}
+      console.log('✅ [TREND-FRONTEND] Usando data.data');
+      setTrendData(data.data);
+    } else {
+      console.warn('⚠️ [TREND-FRONTEND] Formato inesperado:', data);
+      setTrendData([]);
+    }
+    
+  } catch (error) {
+    console.error('❌ [TREND-FRONTEND] Error:', error);
+    setTrendData([]);
+  } finally {
+    setLoadingTrend(false);
+  }
+};
 
   const fetchRotationData = async () => {
     try {
@@ -186,20 +220,56 @@ const Products = ({ userRole, onLogout }) => {
 
   // Procesar datos de tendencia para el gráfico de líneas
   const processedTrendData = () => {
-    const monthlyData = {};
+  console.log('🔄 [PROCESS-TREND] Procesando trendData...', trendData.length, 'registros');
+  
+  if (!trendData || trendData.length === 0) {
+    console.warn('⚠️ [PROCESS-TREND] trendData está vacío');
+    return [];
+  }
+  
+  const monthlyData = {};
+  
+  trendData.forEach((item, index) => {
+    if (!item.mes || !item.producto) {
+      console.warn('⚠️ [PROCESS-TREND] Item sin mes o producto:', item);
+      return;
+    }
     
-    trendData.forEach(item => {
-      if (!monthlyData[item.mes]) {
-        monthlyData[item.mes] = { mes: item.mes };
-      }
-      monthlyData[item.mes][item.producto] = item.ventas_mes;
-    });
+    if (!monthlyData[item.mes]) {
+      monthlyData[item.mes] = { mes: item.mes };
+    }
+    monthlyData[item.mes][item.producto] = item.ventas_mes;
     
-    return Object.values(monthlyData).sort((a, b) => a.mes.localeCompare(b.mes));
-  };
+    // Log primeros 3 para debug
+    if (index < 3) {
+      console.log(`  📌 ${item.producto} - ${item.mes}: S/ ${item.ventas_mes}`);
+    }
+  });
+  
+  const result = Object.values(monthlyData).sort((a, b) => a.mes.localeCompare(b.mes));
+  
+  console.log('✅ [PROCESS-TREND] Procesados', result.length, 'meses');
+  if (result.length > 0) {
+    console.log('📋 [PROCESS-TREND] Primer mes:', result[0]);
+  }
+  
+  return result;
+};
 
   // Obtener productos únicos para las líneas
-  const uniqueProducts = [...new Set(trendData.map(item => item.producto))].slice(0, 6);
+ const uniqueProducts = React.useMemo(() => {
+  console.log('🔄 [UNIQUE-PRODUCTS] Calculando productos únicos...');
+  
+  if (!trendData || trendData.length === 0) {
+    console.warn('⚠️ [UNIQUE-PRODUCTS] trendData vacío');
+    return [];
+  }
+  
+  const products = [...new Set(trendData.map(item => item.producto))].slice(0, 6);
+  console.log('✅ [UNIQUE-PRODUCTS] Productos:', products);
+  
+  return products;
+}, [trendData]);
 
   // Preparar datos de Pareto con mejor formato
   const paretoChartData = paretoData.slice(0, 12).map((item, index) => ({
@@ -399,34 +469,50 @@ const loadTrendData = async () => {
 
             {/* 2. Tendencias de Ventas */}
             <div className="chart-section">
-              <h3>📈 Tendencias de Ventas por Mes</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={processedTrendData()}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="mes" 
-                    fontSize={10}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis tickFormatter={formatCurrency} fontSize={10} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend />
-                  {uniqueProducts.map((product, index) => (
-                    <Line 
-                      key={product}
-                      type="monotone" 
-                      dataKey={product} 
-                      stroke={COLORS[index % COLORS.length]}
-                      strokeWidth={3}
-                      dot={{ fill: COLORS[index % COLORS.length], r: 4 }}
-                      activeDot={{ r: 6, strokeWidth: 2 }}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+  <h3>📈 Tendencias de Ventas por Mes</h3>
+  
+  {loadingTrend ? (
+    <div style={{ textAlign: 'center', padding: '50px' }}>
+      <p>Cargando tendencias...</p>
+    </div>
+  ) : trendData.length === 0 ? (
+    <div style={{ textAlign: 'center', padding: '50px', color: '#6c757d' }}>
+      <p>⚠️ No hay datos de tendencias disponibles</p>
+    </div>
+  ) : processedTrendData().length === 0 ? (
+    <div style={{ textAlign: 'center', padding: '50px', color: '#6c757d' }}>
+      <p>⚠️ Error procesando datos de tendencias</p>
+      <p style={{ fontSize: '12px' }}>Datos raw: {trendData.length} registros</p>
+    </div>
+  ) : (
+    <ResponsiveContainer width="100%" height={400}>
+      <LineChart data={processedTrendData()}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis 
+          dataKey="mes" 
+          fontSize={10}
+          angle={-45}
+          textAnchor="end"
+          height={60}
+        />
+        <YAxis tickFormatter={formatCurrency} fontSize={10} />
+        <Tooltip content={<CustomTooltip />} />
+        <Legend />
+        {uniqueProducts.map((product, index) => (
+          <Line 
+            key={product}
+            type="monotone" 
+            dataKey={product} 
+            stroke={COLORS[index % COLORS.length]}
+            strokeWidth={3}
+            dot={{ fill: COLORS[index % COLORS.length], r: 4 }}
+            activeDot={{ r: 6, strokeWidth: 2 }}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  )}
+</div>
 
             {/* 3. Velocidad de Rotación */}
             <div className="chart-section">
