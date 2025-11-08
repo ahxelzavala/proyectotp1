@@ -219,54 +219,82 @@ const Products = ({ userRole, onLogout }) => {
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7C7C'];
 
   // Procesar datos de tendencia para el gráfico de líneas
-  const processedTrendData = () => {
-  console.log('🔄 [PROCESS-TREND] Procesando trendData...', trendData.length, 'registros');
+  const processedTrendData = React.useMemo(() => {
+  console.log('🔄 [PROCESS-TREND] Iniciando procesamiento...');
+  console.log('📊 [PROCESS-TREND] trendData length:', trendData?.length);
+  console.log('📋 [PROCESS-TREND] trendData sample:', trendData?.slice(0, 3));
   
-  if (!trendData || trendData.length === 0) {
-    console.warn('⚠️ [PROCESS-TREND] trendData está vacío');
+  if (!trendData || !Array.isArray(trendData) || trendData.length === 0) {
+    console.warn('⚠️ [PROCESS-TREND] trendData vacío o no es array');
     return [];
   }
   
+  // Crear objeto para agrupar por mes
   const monthlyData = {};
   
   trendData.forEach((item, index) => {
-    if (!item.mes || !item.producto) {
-      console.warn('⚠️ [PROCESS-TREND] Item sin mes o producto:', item);
+    // Validar que el item tiene los campos necesarios
+    if (!item || !item.mes || !item.producto) {
+      console.warn(`⚠️ [PROCESS-TREND] Item ${index} inválido:`, item);
       return;
     }
     
-    if (!monthlyData[item.mes]) {
-      monthlyData[item.mes] = { mes: item.mes };
-    }
-    monthlyData[item.mes][item.producto] = item.ventas_mes;
+    const mes = item.mes;
+    const producto = item.producto;
+    const ventas = item.ventas_mes || 0;
     
-    // Log primeros 3 para debug
-    if (index < 3) {
-      console.log(`  📌 ${item.producto} - ${item.mes}: S/ ${item.ventas_mes}`);
+    // Inicializar mes si no existe
+    if (!monthlyData[mes]) {
+      monthlyData[mes] = { mes };
+    }
+    
+    // Agregar ventas del producto para este mes
+    monthlyData[mes][producto] = ventas;
+    
+    // Log de primeros 5 items
+    if (index < 5) {
+      console.log(`  📌 [${index}] ${producto} | ${mes}: S/ ${ventas.toLocaleString()}`);
     }
   });
   
-  const result = Object.values(monthlyData).sort((a, b) => a.mes.localeCompare(b.mes));
+  // Convertir a array y ordenar por mes
+  const result = Object.values(monthlyData).sort((a, b) => {
+    return a.mes.localeCompare(b.mes);
+  });
   
   console.log('✅ [PROCESS-TREND] Procesados', result.length, 'meses');
-  if (result.length > 0) {
-    console.log('📋 [PROCESS-TREND] Primer mes:', result[0]);
+  console.log('📋 [PROCESS-TREND] Primeros 3 meses:', result.slice(0, 3));
+  
+  if (result.length === 0) {
+    console.error('❌ [PROCESS-TREND] Resultado vacío después de procesar!');
+    console.error('📊 [PROCESS-TREND] monthlyData keys:', Object.keys(monthlyData));
   }
   
   return result;
-};
+}, [trendData]);
 
   // Obtener productos únicos para las líneas
  const uniqueProducts = React.useMemo(() => {
   console.log('🔄 [UNIQUE-PRODUCTS] Calculando productos únicos...');
+  console.log('📊 [UNIQUE-PRODUCTS] trendData length:', trendData?.length);
   
-  if (!trendData || trendData.length === 0) {
+  if (!trendData || !Array.isArray(trendData) || trendData.length === 0) {
     console.warn('⚠️ [UNIQUE-PRODUCTS] trendData vacío');
     return [];
   }
   
-  const products = [...new Set(trendData.map(item => item.producto))].slice(0, 6);
-  console.log('✅ [UNIQUE-PRODUCTS] Productos:', products);
+  // Extraer productos únicos
+  const productSet = new Set();
+  trendData.forEach(item => {
+    if (item && item.producto) {
+      productSet.add(item.producto);
+    }
+  });
+  
+  const products = Array.from(productSet).slice(0, 6);
+  
+  console.log('✅ [UNIQUE-PRODUCTS] Productos encontrados:', products.length);
+  console.log('📋 [UNIQUE-PRODUCTS] Lista:', products);
   
   return products;
 }, [trendData]);
@@ -468,49 +496,123 @@ const loadTrendData = async () => {
             </div>
 
             {/* 2. Tendencias de Ventas */}
-            <div className="chart-section">
+<div className="chart-section">
   <h3>📈 Tendencias de Ventas por Mes</h3>
   
   {loadingTrend ? (
     <div style={{ textAlign: 'center', padding: '50px' }}>
+      <div className="loading-spinner"></div>
       <p>Cargando tendencias...</p>
     </div>
-  ) : trendData.length === 0 ? (
+  ) : !trendData || trendData.length === 0 ? (
     <div style={{ textAlign: 'center', padding: '50px', color: '#6c757d' }}>
       <p>⚠️ No hay datos de tendencias disponibles</p>
+      <p style={{ fontSize: '12px', marginTop: '10px' }}>
+        Verifica que el CSV tenga datos con fechas válidas
+      </p>
     </div>
   ) : processedTrendData().length === 0 ? (
-    <div style={{ textAlign: 'center', padding: '50px', color: '#6c757d' }}>
-      <p>⚠️ Error procesando datos de tendencias</p>
-      <p style={{ fontSize: '12px' }}>Datos raw: {trendData.length} registros</p>
+    <div style={{ textAlign: 'center', padding: '50px', color: '#e74c3c' }}>
+      <p>❌ Error procesando datos de tendencias</p>
+      <p style={{ fontSize: '12px', marginTop: '10px' }}>
+        Datos recibidos: {trendData.length} registros
+      </p>
+      <p style={{ fontSize: '12px' }}>
+        Meses procesados: {processedTrendData().length}
+      </p>
+      <button 
+        onClick={() => {
+          console.log('🔍 DEBUG trendData:', trendData.slice(0, 5));
+          console.log('🔍 DEBUG processedData:', processedTrendData().slice(0, 5));
+          console.log('🔍 DEBUG uniqueProducts:', uniqueProducts);
+        }}
+        style={{
+          marginTop: '10px',
+          padding: '8px 16px',
+          background: '#007bff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer'
+        }}
+      >
+        🔍 Ver detalles en consola
+      </button>
+    </div>
+  ) : uniqueProducts.length === 0 ? (
+    <div style={{ textAlign: 'center', padding: '50px', color: '#e74c3c' }}>
+      <p>⚠️ No se encontraron productos para mostrar</p>
+      <p style={{ fontSize: '12px', marginTop: '10px' }}>
+        Datos procesados: {processedTrendData().length} meses
+      </p>
     </div>
   ) : (
-    <ResponsiveContainer width="100%" height={400}>
-      <LineChart data={processedTrendData()}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis 
-          dataKey="mes" 
-          fontSize={10}
-          angle={-45}
-          textAnchor="end"
-          height={60}
-        />
-        <YAxis tickFormatter={formatCurrency} fontSize={10} />
-        <Tooltip content={<CustomTooltip />} />
-        <Legend />
-        {uniqueProducts.map((product, index) => (
-          <Line 
-            key={product}
-            type="monotone" 
-            dataKey={product} 
-            stroke={COLORS[index % COLORS.length]}
-            strokeWidth={3}
-            dot={{ fill: COLORS[index % COLORS.length], r: 4 }}
-            activeDot={{ r: 6, strokeWidth: 2 }}
+    <>
+      <ResponsiveContainer width="100%" height={400}>
+        <LineChart data={processedTrendData()}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis 
+            dataKey="mes" 
+            tick={{ fontSize: 11 }}
+            angle={-45}
+            textAnchor="end"
+            height={80}
           />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
+          <YAxis 
+            tick={{ fontSize: 11 }}
+            tickFormatter={(value) => `S/ ${(value / 1000).toFixed(0)}K`}
+          />
+          <Tooltip 
+            content={({ active, payload, label }) => {
+              if (active && payload && payload.length) {
+                return (
+                  <div className="custom-tooltip">
+                    <p className="label"><strong>{label}</strong></p>
+                    {payload.map((entry, index) => (
+                      <p key={index} style={{ color: entry.color }}>
+                        {entry.name}: S/ {entry.value?.toLocaleString('es-PE', { minimumFractionDigits: 2 })}
+                      </p>
+                    ))}
+                  </div>
+                );
+              }
+              return null;
+            }}
+          />
+          <Legend 
+            wrapperStyle={{ fontSize: '12px' }}
+            iconType="line"
+          />
+          {uniqueProducts.map((producto, index) => (
+            <Line
+              key={producto}
+              type="monotone"
+              dataKey={producto}
+              stroke={COLORS[index % COLORS.length]}
+              strokeWidth={2}
+              dot={{ fill: COLORS[index % COLORS.length], r: 3 }}
+              activeDot={{ r: 5 }}
+              connectNulls
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+      
+      <div className="chart-stats" style={{ marginTop: '15px' }}>
+        <div className="stat-item">
+          <span className="stat-label">Productos</span>
+          <span className="stat-value">{uniqueProducts.length}</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-label">Períodos</span>
+          <span className="stat-value">{processedTrendData().length}</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-label">Registros</span>
+          <span className="stat-value">{trendData.length}</span>
+        </div>
+      </div>
+    </>
   )}
 </div>
 
