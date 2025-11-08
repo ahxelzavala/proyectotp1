@@ -2629,144 +2629,199 @@ async def get_top_products_6_postgresql():
         }
 
 
-        # 1. Modificar comparative-bars existente:
+# ===== ENDPOINT 1: COMPARATIVE BARS (CORREGIDO) =====
 @app.get("/products/analytics/comparative-bars")
-async def get_products_comparative_bars(
-    period: str = "12m",  # 3m, 6m, 12m
-    limit: int = 15,
+async def get_products_comparative_bars_fixed(
+    limit: int = 10,
     db: Session = Depends(get_database)
 ):
     """
-    Gráfico de barras comparativo de productos: Ventas de productos más populares
-    en diferentes períodos (3, 6 y 12 meses)
-    Variables: Articulo, Venta, Cantidad, Fecha
+    Top productos por ventas - VERSIÓN CORREGIDA PARA POSTGRESQL
     """
     try:
-        # Definir el período
-        period_mapping = {
-            "3m": 3,
-            "6m": 6, 
-            "12m": 12
-        }
-        months = period_mapping.get(period, 12)
+        logger.info(f"🔍 Obteniendo top {limit} productos...")
         
-        # Consulta para obtener productos más vendidos por período
+        # Verificar que hay datos
+        total_check = db.execute(text("SELECT COUNT(*) FROM client_data")).scalar()
+        if total_check == 0:
+            logger.warning("⚠️ No hay datos en client_data")
+            return {
+                "success": False,
+                "message": "No hay datos cargados. Por favor, sube un archivo CSV.",
+                "data": []
+            }
+        
+        # Query corregida para PostgreSQL
         query = text("""
-            WITH product_sales AS (
-                SELECT 
-                    COALESCE(articulo, 'Producto sin nombre') as producto,
-                    COALESCE(categoria, 'Sin categoría') as categoria,
-                    COALESCE(proveedor, 'Sin proveedor') as proveedor,
-                    SUM(COALESCE(venta, 0)) as total_ventas,
-                    SUM(COALESCE(cantidad, 0)) as total_cantidad,
-                    SUM(COALESCE(costo, 0)) as total_costo,
-                    SUM(COALESCE(mb, 0)) as total_margen,
-                    COUNT(DISTINCT factura) as num_facturas,
-                    COUNT(DISTINCT cliente) as num_clientes,
-                    CASE 
-                        WHEN SUM(COALESCE(venta, 0)) > 0 THEN
-                            ROUND((SUM(COALESCE(mb, 0)) / SUM(COALESCE(venta, 0))) * 100, 2)
-                        ELSE 0
-                    END as margen_porcentaje
-                FROM client_data 
-                WHERE articulo IS NOT NULL AND articulo != ''
-                    AND fecha::date >= CURRENT_DATE - INTERVAL ':months months'
-                GROUP BY articulo, categoria, proveedor
-            )
             SELECT 
-                producto,
-                categoria,
-                proveedor,
-                total_ventas,
-                total_cantidad,
-                total_costo,
-                total_margen,
-                margen_porcentaje,
-                num_facturas,
-                num_clientes
-            FROM product_sales
-            WHERE total_ventas > 0
+                COALESCE(articulo, 'Sin nombre') as producto,
+                COALESCE(categoria, 'Sin categoría') as categoria,
+                COALESCE(proveedor, 'Sin proveedor') as proveedor,
+                
+                -- Ventas totales
+                ROUND(CAST(SUM(
+                    CASE 
+                        WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
+                        THEN CAST(venta AS NUMERIC)
+                        ELSE 0
+                    END
+                ) AS NUMERIC), 2) as total_ventas,
+                
+                -- Margen total
+                ROUND(CAST(SUM(
+                    CASE 
+                        WHEN mb IS NOT NULL AND CAST(mb AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
+                        THEN CAST(mb AS NUMERIC)
+                        ELSE 0
+                    END
+                ) AS NUMERIC), 2) as total_margen,
+                
+                -- Métricas adicionales
+                COUNT(DISTINCT factura) as num_facturas,
+                COUNT(DISTINCT cliente) as num_clientes,
+                SUM(COALESCE(cantidad, 0)) as cantidad_total
+                
+            FROM client_data
+            WHERE articulo IS NOT NULL 
+            AND TRIM(articulo) != ''
+            AND venta IS NOT NULL
+            GROUP BY articulo, categoria, proveedor
+            HAVING SUM(
+                CASE 
+                    WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
+                    THEN CAST(venta AS NUMERIC)
+                    ELSE 0
+                END
+            ) > 0
             ORDER BY total_ventas DESC
-            LIMIT :limit
+            LIMIT :limit_param
         """)
         
-        result = db.execute(query, {"months": months, "limit": limit}).fetchall()
+        result = db.execute(query, {"limit_param": limit}).fetchall()
         
+        if not result:
+            logger.warning("⚠️ No se encontraron productos con ventas")
+            return {
+                "success": False,
+                "message": "No se encontraron productos con datos de ventas válidos",
+                "data": []
+            }
+        
+        # Procesar resultados
         data = []
         for row in result:
             data.append({
                 "producto": row.producto,
                 "categoria": row.categoria,
                 "proveedor": row.proveedor,
-                "total_ventas": float(row.total_ventas),
-                "total_cantidad": float(row.total_cantidad),
-                "total_costo": float(row.total_costo),
-                "total_margen": float(row.total_margen),
-                "margen_porcentaje": float(row.margen_porcentaje),
+                "total_ventas": float(row.total_ventas or 0),
+                "total_margen": float(row.total_margen or 0),
                 "num_facturas": row.num_facturas,
-                "num_clientes": row.num_clientes
+                "num_clientes": row.num_clientes,
+                "cantidad_total": float(row.cantidad_total or 0)
             })
+        
+        logger.info(f"✅ {len(data)} productos obtenidos exitosamente")
         
         return {
             "success": True,
             "data": data,
-            "period": f"Últimos {months} meses",
-            "chart_type": "comparative_bar",
-            "description": f"Top {limit} productos más vendidos en los últimos {months} meses"
+            "total": len(data),
+            "message": f"Top {len(data)} productos obtenidos"
         }
         
     except Exception as e:
-        logger.error(f"Error en gráfico comparativo de productos: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Error en comparative-bars: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "data": [],
+            "error_details": str(e)
+        }
+
 
         # 2. Modificar trend-lines existente:
+
+
+# ===== ENDPOINT 2: TREND LINES (CORREGIDO) =====
 @app.get("/products/analytics/trend-lines")
-async def get_products_trend_lines(
-    top_products: int = 10,
+async def get_products_trend_lines_fixed(
+    top_products: int = 6,
     db: Session = Depends(get_database)
 ):
     """
-    Gráfico de líneas de tendencias de productos: Tendencias de ventas a lo largo del tiempo
-    Variables: Articulo, Fecha, Venta, Cantidad
+    Tendencias de ventas por mes - CORREGIDO PARA POSTGRESQL
     """
     try:
+        logger.info(f"📈 Obteniendo tendencias para top {top_products} productos...")
+        
         # Primero obtener los productos más vendidos
-        top_products_query = text("""
+        top_query = text("""
             SELECT 
-                COALESCE(articulo, 'Producto sin nombre') as producto,
-                SUM(COALESCE(venta, 0)) as total_ventas
-            FROM client_data 
-            WHERE articulo IS NOT NULL AND articulo != ''
-                AND fecha IS NOT NULL
+                COALESCE(articulo, 'Sin nombre') as producto,
+                SUM(
+                    CASE 
+                        WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
+                        THEN CAST(venta AS NUMERIC)
+                        ELSE 0
+                    END
+                ) as total_ventas
+            FROM client_data
+            WHERE articulo IS NOT NULL 
+            AND TRIM(articulo) != ''
+            AND fecha IS NOT NULL
             GROUP BY articulo
+            HAVING SUM(
+                CASE 
+                    WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
+                    THEN CAST(venta AS NUMERIC)
+                    ELSE 0
+                END
+            ) > 0
             ORDER BY total_ventas DESC
-            LIMIT :top_products
+            LIMIT :limit_param
         """)
         
-        top_products_result = db.execute(top_products_query, {"top_products": top_products}).fetchall()
-        top_product_names = [row.producto for row in top_products_result]
+        top_result = db.execute(top_query, {"limit_param": top_products}).fetchall()
         
-        if not top_product_names:
+        if not top_result:
             return {
-                "success": True,
-                "data": [],
-                "message": "No se encontraron productos con datos válidos"
+                "success": False,
+                "message": "No se encontraron productos con datos válidos",
+                "data": []
             }
         
-        # Obtener tendencias mensuales para estos productos
+        top_product_names = [row.producto for row in top_result]
+        
+        # Obtener tendencias mensuales
         trend_query = text("""
             SELECT 
-                COALESCE(articulo, 'Producto sin nombre') as producto,
-                TO_CHAR(fecha::date, 'YYYY-MM') as mes,
-                SUM(COALESCE(venta, 0)) as ventas_mes,
-                SUM(COALESCE(cantidad, 0)) as cantidad_mes,
-                COUNT(DISTINCT factura) as facturas_mes,
-                AVG(COALESCE(venta, 0)) as venta_promedio
-            FROM client_data 
+                COALESCE(articulo, 'Sin nombre') as producto,
+                CASE 
+                    -- Formato YYYY-MM-DD
+                    WHEN fecha ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN
+                        SUBSTRING(fecha, 1, 7)
+                    -- Formato DD/MM/YYYY
+                    WHEN fecha ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}' THEN
+                        SUBSTRING(fecha, 7, 4) || '-' || SUBSTRING(fecha, 4, 2)
+                    ELSE '2024-01'
+                END as mes,
+                
+                SUM(
+                    CASE 
+                        WHEN venta IS NOT NULL AND CAST(venta AS TEXT) ~ '^[0-9]+\.?[0-9]*$'
+                        THEN CAST(venta AS NUMERIC)
+                        ELSE 0
+                    END
+                ) as ventas_mes,
+                
+                COUNT(DISTINCT factura) as facturas_mes
+                
+            FROM client_data
             WHERE articulo = ANY(:product_names)
-                AND fecha IS NOT NULL
-                AND fecha::date >= CURRENT_DATE - INTERVAL '12 months'
-            GROUP BY articulo, TO_CHAR(fecha::date, 'YYYY-MM')
+            AND fecha IS NOT NULL
+            GROUP BY articulo, mes
             ORDER BY mes ASC, ventas_mes DESC
         """)
         
@@ -2777,22 +2832,26 @@ async def get_products_trend_lines(
             data.append({
                 "producto": row.producto,
                 "mes": row.mes,
-                "ventas_mes": float(row.ventas_mes),
-                "cantidad_mes": float(row.cantidad_mes),
-                "facturas_mes": row.facturas_mes,
-                "venta_promedio": float(row.venta_promedio)
+                "ventas_mes": float(row.ventas_mes or 0),
+                "facturas_mes": row.facturas_mes
             })
+        
+        logger.info(f"✅ {len(data)} registros de tendencia obtenidos")
         
         return {
             "success": True,
             "data": data,
-            "chart_type": "line_trend",
-            "description": f"Tendencias mensuales de los top {top_products} productos más vendidos"
+            "products_included": top_product_names,
+            "message": f"Tendencias para {len(top_product_names)} productos"
         }
         
     except Exception as e:
-        logger.error(f"Error en tendencias de productos: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Error en trend-lines: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "data": []
+        }
 
 @app.get("/products/analytics/rotation-speed")
 async def get_rotation_speed(limit: int = 10, db: Session = Depends(get_database)):
