@@ -19,6 +19,10 @@ from pathlib import Path
 from models import get_database, ClientData, AuthorizedEmail, create_tables, test_database_connection, migrate_add_new_columns
 from config import settings
 
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # ===== IMPORTS PARA ML =====
 # ===== IMPORTS PARA ML CON MANEJO ROBUSTO =====
 import traceback
@@ -165,9 +169,7 @@ class SingleClientPrediction(BaseModel):
     proveedor: Optional[str] = None
     threshold: Optional[float] = None
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
 
 app = FastAPI(
     title="Sistema de Análisis Anders",
