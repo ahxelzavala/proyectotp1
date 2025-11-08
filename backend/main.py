@@ -2575,53 +2575,48 @@ async def debug_test_acquisition(db: Session = Depends(get_database)):
 
 
 @app.get("/products/analytics/top_products_6")
-async def get_top_products_6_postgresql():
-    """Obtiene los top 6 productos más vendidos desde PostgreSQL"""
+async def get_top_products_6(db: Session = Depends(get_database)):
+    """Top 6 productos - SIN SessionLocal"""
     try:
-        db = SessionLocal()
-        try:
-            logger.info("🔍 Obteniendo top 6 productos desde PostgreSQL...")
-            
-            result = db.execute(text("""
-                SELECT 
-                    product,
-                    SUM(value) as total_sales,
-                    SUM(value - cost) as total_margin,
-                    COUNT(*) as quantity,
-                    AVG(value) as avg_sale
-                FROM client_data
-                WHERE product IS NOT NULL 
-                  AND value IS NOT NULL
-                  AND value > 0
-                GROUP BY product
-                ORDER BY total_sales DESC
-                LIMIT 6
-            """))
-            
-            products = []
-            for row in result:
-                products.append({
-                    "product": row[0],
-                    "total_sales": float(row[1]) if row[1] else 0,
-                    "total_margin": float(row[2]) if row[2] else 0,
-                    "quantity": int(row[3]),
-                    "avg_sale": float(row[4]) if row[4] else 0
-                })
-            
-            logger.info(f"✅ Top 6 productos obtenidos: {len(products)} productos")
-            
-            return {
-                "success": True,
-                "products": products,
-                "total": len(products)
-            }
-            
-        finally:
-            db.close()
-            
+        logger.info("🏆 [TOP6] Obteniendo top 6 productos...")
+        
+        query = text("""
+            SELECT 
+                articulo as producto,
+                SUM(venta) as total_ventas,
+                SUM(mb) as total_margen,
+                COUNT(*) as cantidad,
+                AVG(venta) as promedio_venta
+            FROM client_data
+            WHERE articulo IS NOT NULL 
+            AND venta IS NOT NULL
+            AND venta > 0
+            GROUP BY articulo
+            ORDER BY total_ventas DESC
+            LIMIT 6
+        """)
+        
+        result = db.execute(query).fetchall()
+        
+        products = []
+        for row in result:
+            products.append({
+                "producto": row.producto,
+                "total_ventas": float(row.total_ventas or 0),
+                "total_margen": float(row.total_margen or 0),
+                "cantidad": int(row.cantidad),
+                "promedio_venta": float(row.promedio_venta or 0)
+            })
+        
+        logger.info(f"✅ [TOP6] {len(products)} productos obtenidos")
+        
+        return {
+            "success": True,
+            "products": products
+        }
+        
     except Exception as e:
-        logger.error(f"❌ Error obteniendo top 6 productos: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error(f"❌ [TOP6] Error: {str(e)}")
         return {
             "success": False,
             "products": [],
@@ -2631,88 +2626,70 @@ async def get_top_products_6_postgresql():
 
 # ===== ENDPOINT 1: COMPARATIVE BARS (CORREGIDO) =====
 @app.get("/products/analytics/comparative-bars")
-async def get_products_comparative_bars_fixed_format(
+async def get_products_comparative_bars(
     limit: int = 10,
     db: Session = Depends(get_database)
 ):
     """
-    Top productos por ventas - FORMATO CORRECTO PARA FRONTEND
-    Devuelve: Array directo en "data" (no nested)
+    Top productos por ventas - POSTGRESQL COMPATIBLE
+    Solución a los errores:
+    1. CAST a TEXT antes de usar operador regex (~)
+    2. CAST explícito en ROUND
+    3. Devuelve array directo para el frontend
     """
     try:
-        logger.info(f"🔍 Obteniendo top {limit} productos (formato frontend)...")
+        logger.info(f"🔍 [COMPARATIVE] Obteniendo top {limit} productos...")
         
-        # Verificar que hay datos
+        # Verificar datos
         total_check = db.execute(text("SELECT COUNT(*) FROM client_data")).scalar()
-        logger.info(f"📊 Total registros en DB: {total_check}")
+        logger.info(f"📊 [COMPARATIVE] Total registros: {total_check}")
         
         if total_check == 0:
-            logger.warning("⚠️ No hay datos en client_data")
-            return []  # Devolver array vacío directamente
+            logger.warning("⚠️ [COMPARATIVE] No hay datos")
+            return []
         
-        # Query corregida para PostgreSQL
+        # Query CORREGIDA para PostgreSQL - Sin usar ~ en NUMERIC
         query = text("""
             SELECT 
                 COALESCE(articulo, 'Sin nombre') as producto,
                 COALESCE(categoria, 'Sin categoría') as categoria,
                 COALESCE(proveedor, 'Sin proveedor') as proveedor,
                 
-                -- Ventas totales (conversión segura)
-                ROUND(COALESCE(
-                    SUM(
-                        CASE 
-                            WHEN venta ~ '^[0-9]+\.?[0-9]*$'
-                            THEN CAST(venta AS NUMERIC)
-                            ELSE 0
-                        END
-                    ), 0
-                )::NUMERIC, 2) as total_ventas,
+                -- Ventas: sumar directamente sin validación regex
+                ROUND(CAST(COALESCE(SUM(venta), 0) AS NUMERIC), 2) as total_ventas,
                 
-                -- Margen total (conversión segura)
-                ROUND(COALESCE(
-                    SUM(
-                        CASE 
-                            WHEN mb ~ '^[0-9]+\.?[0-9]*$'
-                            THEN CAST(mb AS NUMERIC)
-                            ELSE 0
-                        END
-                    ), 0
-                )::NUMERIC, 2) as total_margen,
+                -- Margen: sumar directamente
+                ROUND(CAST(COALESCE(SUM(mb), 0) AS NUMERIC), 2) as total_margen,
                 
                 -- Métricas adicionales
                 COUNT(DISTINCT factura) as num_facturas,
                 COUNT(DISTINCT cliente) as num_clientes,
-                ROUND(COALESCE(SUM(cantidad), 0)::NUMERIC, 2) as cantidad_total
+                ROUND(CAST(COALESCE(SUM(cantidad), 0) AS NUMERIC), 2) as cantidad_total
                 
             FROM client_data
             WHERE articulo IS NOT NULL 
             AND TRIM(articulo) != ''
             AND articulo != 'N/A'
+            AND venta IS NOT NULL
+            AND venta > 0
             GROUP BY articulo, categoria, proveedor
-            HAVING SUM(
-                CASE 
-                    WHEN venta ~ '^[0-9]+\.?[0-9]*$'
-                    THEN CAST(venta AS NUMERIC)
-                    ELSE 0
-                END
-            ) > 100
+            HAVING SUM(venta) > 100
             ORDER BY total_ventas DESC
             LIMIT :limit_param
         """)
         
         result = db.execute(query, {"limit_param": limit}).fetchall()
         
-        logger.info(f"📊 Query ejecutada, {len(result)} productos encontrados")
+        logger.info(f"📊 [COMPARATIVE] Query ejecutada: {len(result)} resultados")
         
         if not result or len(result) == 0:
-            logger.warning("⚠️ No se encontraron productos con ventas válidas")
-            # Devolver array vacío si no hay datos
+            logger.warning("⚠️ [COMPARATIVE] Sin resultados")
             return []
         
-        # Procesar resultados en el formato EXACTO que espera el frontend
+        # Formatear datos
         data = []
         for i, row in enumerate(result):
-            producto_data = {
+            item = {
                 "producto": row.producto,
                 "categoria": row.categoria,
                 "proveedor": row.proveedor,
@@ -2722,23 +2699,20 @@ async def get_products_comparative_bars_fixed_format(
                 "num_clientes": int(row.num_clientes or 0),
                 "cantidad_total": float(row.cantidad_total or 0)
             }
-            data.append(producto_data)
+            data.append(item)
             
-            # Log de los primeros 3 para debugging
+            # Log primeros 3
             if i < 3:
-                logger.info(f"  {i+1}. {row.producto}: S/ {row.total_ventas:,.2f}")
+                logger.info(f"  ✅ {i+1}. {row.producto}: S/ {row.total_ventas:,.2f}")
         
-        logger.info(f"✅ Devolviendo {len(data)} productos exitosamente")
+        logger.info(f"✅ [COMPARATIVE] Retornando {len(data)} productos")
         
-        # IMPORTANTE: Devolver ARRAY DIRECTO (no wrapped en objeto)
-        # El frontend espera: [{ producto: "...", total_ventas: ... }, ...]
+        # RETORNAR ARRAY DIRECTO
         return data
         
     except Exception as e:
-        logger.error(f"❌ Error en comparative-bars: {str(e)}")
-        logger.error(f"Traceback completo: {traceback.format_exc()}")
-        
-        # En caso de error, devolver array vacío
+        logger.error(f"❌ [COMPARATIVE] Error: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return []
 
         # 2. Modificar trend-lines existente:
