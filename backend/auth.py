@@ -92,27 +92,37 @@ async def get_current_active_user(current_user = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Usuario inactivo")
     return current_user
 
-async def get_current_admin_user(current_user = Depends(get_current_active_user)):
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_active_user)
+):
     """Verificar que el usuario sea administrador"""
     from models import UserRole
     
-    # Si es el admin hardcoded (viene del token)
+    # Si es el admin hardcoded
     if hasattr(current_user, 'email') and current_user.email == "admin@anders.com":
-        # Crear un objeto mock para el admin hardcoded
         class AdminUser:
             email = "admin@anders.com"
             role = UserRole.ADMIN
             full_name = "Administrador"
             is_active = True
+            id = 1
         
         return AdminUser()
     
-    # Usuario normal de la DB
+    # Usuario normal de la DB - verificar rol
+    if not hasattr(current_user, 'role'):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuario sin rol definido"
+        )
+    
+    # Comparar con el enum correcto
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permisos de administrador"
         )
+    
     return current_user
 
 def validate_email_domain(email: str) -> bool:
