@@ -213,3 +213,26 @@ form .register-link {
 .input-box input.error {
     border-color: rgba(255, 68, 68, 0.5);
 }
+
+/* Hints para ayudar al usuario */
+.input-box .input-hint {
+    position: absolute;
+    bottom: -18px;
+    left: 20px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+}
+
+/* Aumentar el margen de los input-box para que no se sobrelapen los hints */
+form .input-box {
+    position: relative;
+    width: 100%;
+    height: 50px;
+    margin: 25px 0; /* Aumentado de 20px a 25px */
+}
+
+/* Ajustar altura del wrapper cuando hay hints */
+.wrapper.active {
+    height: 590px; /* Aumentado para acomodar los hints */
+}
