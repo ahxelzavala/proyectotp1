@@ -3901,7 +3901,59 @@ async def create_analyst(
         logger.error(f"❌ Error creando analista: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
-    
+
+
+
+@app.get("/users/analysts")
+async def get_analysts(
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_database)
+):
+    """
+    Obtener lista de todos los analistas (solo admin)
+    """
+    try:
+        logger.info(f"👤 Admin {current_user.email if hasattr(current_user, 'email') else 'admin'} solicitando lista de analistas")
+        
+        # Obtener analistas
+        analysts = db.query(User).filter(User.role == UserRole.ANALYST).all()
+        
+        logger.info(f"✅ Encontrados {len(analysts)} analistas")
+        
+        # Convertir a dict
+        analysts_data = []
+        for analyst in analysts:
+            try:
+                analysts_data.append({
+                    "id": analyst.id,
+                    "first_name": analyst.first_name,
+                    "last_name": analyst.last_name,
+                    "full_name": f"{analyst.first_name} {analyst.last_name}",
+                    "email": analyst.email,
+                    "role": analyst.role.value,
+                    "status": analyst.status.value,
+                    "is_active": analyst.is_active,
+                    "created_at": analyst.created_at.isoformat() if analyst.created_at else None,
+                    "last_login": analyst.last_login.isoformat() if analyst.last_login else None
+                })
+            except Exception as e:
+                logger.error(f"Error convirtiendo analista {analyst.id}: {str(e)}")
+        
+        return {
+            "success": True,
+            "analysts": analysts_data,
+            "total": len(analysts_data)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo analistas: {str(e)}")
+        return {
+            "success": False,
+            "message": str(e),
+            "analysts": []
+        }
+
+
 @app.put("/users/analysts/{analyst_id}")
 async def update_analyst(
     analyst_id: int,
