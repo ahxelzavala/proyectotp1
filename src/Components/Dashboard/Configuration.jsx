@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FaUserPlus, FaUsers, FaTrash, FaEdit, FaTimes, FaCheckCircle, FaSave } from 'react-icons/fa';
 import Sidebar from './Sidebar';
-import { analystService } from '../services/api';
+import { analystService } from '../../services/api';  // ✅ CORREGIDO: DOS niveles arriba
 import './Configuration.css';
 
 const Configuration = ({ onLogout }) => {
@@ -26,16 +26,14 @@ const Configuration = ({ onLogout }) => {
     setLoading(true);
     
     try {
-      const result = await analystService.getAll();
-      console.log('📊 Resultado:', result);
+      const data = await analystService.getAll();
+      console.log('📊 Resultado:', data);
       
-      if (result.success) {
-        console.log('✅ Analistas cargados:', result.data);
-        setAnalysts(result.data);
-      } else {
-        console.error('❌ Error:', result.error);
-        setErrorMessage(result.error);
-      }
+      // El backend puede devolver array directo o { success, analysts }
+      const analystsList = Array.isArray(data) ? data : (data.analysts || []);
+      
+      console.log('✅ Analistas cargados:', analystsList);
+      setAnalysts(analystsList);
     } catch (error) {
       console.error('❌ Error de red:', error);
       setErrorMessage('Error de conexión con el servidor');
@@ -85,30 +83,26 @@ const Configuration = ({ onLogout }) => {
 
       console.log('📊 Resultado creación:', result);
 
-      if (result.success) {
-        // Recargar lista
-        await loadAnalysts();
-        
-        // Limpiar formulario
-        setNewAnalystFirstName('');
-        setNewAnalystLastName('');
-        setNewAnalystEmail('');
-        
-        // Mostrar mensaje de éxito
-        setSuccessMessage('Analista Registrado Exitosamente');
-        setShowSuccessMessage(true);
+      // Recargar lista
+      await loadAnalysts();
+      
+      // Limpiar formulario
+      setNewAnalystFirstName('');
+      setNewAnalystLastName('');
+      setNewAnalystEmail('');
+      
+      // Mostrar mensaje de éxito
+      setSuccessMessage('Analista Registrado Exitosamente');
+      setShowSuccessMessage(true);
 
-        // Ocultar mensaje después de 3 segundos
-        setTimeout(() => {
-          setShowSuccessMessage(false);
-        }, 3000);
-      } else {
-        console.error('❌ Error:', result.error);
-        setErrorMessage(result.error);
-      }
+      // Ocultar mensaje después de 3 segundos
+      setTimeout(() => {
+        setShowSuccessMessage(false);
+      }, 3000);
+
     } catch (error) {
-      console.error('❌ Error de red:', error);
-      setErrorMessage('Error de conexión con el servidor');
+      console.error('❌ Error:', error);
+      setErrorMessage(error.message || 'Error al crear analista');
     }
 
     setLoading(false);
@@ -122,19 +116,16 @@ const Configuration = ({ onLogout }) => {
     setLoading(true);
     
     try {
-      const result = await analystService.delete(id);
-
-      if (result.success) {
-        await loadAnalysts();
-        setSuccessMessage('Analista eliminado exitosamente');
-        setShowSuccessMessage(true);
-        setTimeout(() => setShowSuccessMessage(false), 3000);
-      } else {
-        setErrorMessage(result.error);
-      }
+      await analystService.delete(id);
+      
+      await loadAnalysts();
+      setSuccessMessage('Analista eliminado exitosamente');
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+      
     } catch (error) {
       console.error('❌ Error:', error);
-      setErrorMessage('Error de conexión con el servidor');
+      setErrorMessage(error.message || 'Error al eliminar analista');
     }
     
     setLoading(false);
@@ -165,25 +156,22 @@ const Configuration = ({ onLogout }) => {
     setLoading(true);
 
     try {
-      const result = await analystService.update(
+      await analystService.update(
         id,
         editForm.firstName.trim(),
         editForm.lastName.trim(),
         editForm.email.trim().toLowerCase()
       );
 
-      if (result.success) {
-        await loadAnalysts();
-        setEditingId(null);
-        setSuccessMessage('Analista actualizado exitosamente');
-        setShowSuccessMessage(true);
-        setTimeout(() => setShowSuccessMessage(false), 3000);
-      } else {
-        setErrorMessage(result.error);
-      }
+      await loadAnalysts();
+      setEditingId(null);
+      setSuccessMessage('Analista actualizado exitosamente');
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+      
     } catch (error) {
       console.error('❌ Error:', error);
-      setErrorMessage('Error de conexión con el servidor');
+      setErrorMessage(error.message || 'Error al actualizar analista');
     }
 
     setLoading(false);
