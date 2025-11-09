@@ -1,39 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { FaUserPlus, FaUsers, FaTrash, FaEdit, FaTimes, FaCheckCircle, FaSave } from 'react-icons/fa';
 import Sidebar from './Sidebar';
+import { analystService } from '../services/api';
 import './Configuration.css';
 
-const Configuration = () => {
+const Configuration = ({ onLogout }) => {
   const [newAnalystFirstName, setNewAnalystFirstName] = useState('');
   const [newAnalystLastName, setNewAnalystLastName] = useState('');
   const [newAnalystEmail, setNewAnalystEmail] = useState('');
   const [analysts, setAnalysts] = useState([]);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', email: '' });
+  const [loading, setLoading] = useState(false);
 
-  // Cargar analistas desde localStorage al iniciar
+  // Cargar analistas al iniciar
   useEffect(() => {
-    const storedAnalysts = localStorage.getItem('analysts');
-    if (storedAnalysts) {
-      setAnalysts(JSON.parse(storedAnalysts));
-    }
+    loadAnalysts();
   }, []);
 
-  // Guardar analistas en localStorage cuando cambian
-  useEffect(() => {
-    if (analysts.length > 0) {
-      localStorage.setItem('analysts', JSON.stringify(analysts));
+  const loadAnalysts = async () => {
+    setLoading(true);
+    const result = await analystService.getAll();
+    
+    if (result.success) {
+      setAnalysts(result.data);
+    } else {
+      setErrorMessage(result.error);
     }
-  }, [analysts]);
+    setLoading(false);
+  };
 
-  // Validar email que termine con @anders.com
   const validateEmail = (email) => {
     return email.toLowerCase().endsWith('@anders.com');
   };
 
-  const handleAddAnalyst = () => {
+  const handleAddAnalyst = async () => {
     setErrorMessage('');
     setShowSuccessMessage(false);
 
@@ -53,54 +57,68 @@ const Configuration = () => {
       return;
     }
 
-    // Verificar si el email ya existe
-    if (analysts.some(analyst => analyst.email.toLowerCase() === newAnalystEmail.toLowerCase())) {
-      setErrorMessage('Este correo ya está registrado');
+    setLoading(true);
+
+    // Llamar al backend
+    const result = await analystService.create(
+      newAnalystFirstName.trim(),
+      newAnalystLastName.trim(),
+      newAnalystEmail.trim().toLowerCase()
+    );
+
+    setLoading(false);
+
+    if (result.success) {
+      // Recargar lista
+      await loadAnalysts();
+      
+      // Limpiar formulario
+      setNewAnalystFirstName('');
+      setNewAnalystLastName('');
+      setNewAnalystEmail('');
+      
+      // Mostrar mensaje de éxito
+      setSuccessMessage('Analista Registrado Exitosamente');
+      setShowSuccessMessage(true);
+
+      // Ocultar mensaje después de 3 segundos
+      setTimeout(() => {
+        setShowSuccessMessage(false);
+      }, 3000);
+    } else {
+      setErrorMessage(result.error);
+    }
+  };
+
+  const handleDeleteAnalyst = async (id) => {
+    if (!window.confirm('¿Estás seguro de eliminar este analista?')) {
       return;
     }
 
-    const newAnalyst = {
-      id: Date.now(),
-      firstName: newAnalystFirstName.trim(),
-      lastName: newAnalystLastName.trim(),
-      email: newAnalystEmail.trim().toLowerCase(),
-      fullName: `${newAnalystFirstName.trim()} ${newAnalystLastName.trim()}`,
-      status: 'Inactivo',
-      registeredPassword: false
-    };
+    setLoading(true);
+    const result = await analystService.delete(id);
+    setLoading(false);
 
-    setAnalysts([...analysts, newAnalyst]);
-    setNewAnalystFirstName('');
-    setNewAnalystLastName('');
-    setNewAnalystEmail('');
-    setShowSuccessMessage(true);
-
-    // Ocultar mensaje después de 3 segundos
-    setTimeout(() => {
-      setShowSuccessMessage(false);
-    }, 3000);
-  };
-
-  const handleDeleteAnalyst = (id) => {
-    const updatedAnalysts = analysts.filter(analyst => analyst.id !== id);
-    setAnalysts(updatedAnalysts);
-    
-    // Si no quedan analistas, limpiar localStorage
-    if (updatedAnalysts.length === 0) {
-      localStorage.removeItem('analysts');
+    if (result.success) {
+      await loadAnalysts();
+      setSuccessMessage('Analista eliminado exitosamente');
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } else {
+      setErrorMessage(result.error);
     }
   };
 
   const handleEditClick = (analyst) => {
     setEditingId(analyst.id);
     setEditForm({
-      firstName: analyst.firstName,
-      lastName: analyst.lastName,
+      firstName: analyst.first_name,
+      lastName: analyst.last_name,
       email: analyst.email
     });
   };
 
-  const handleSaveEdit = (id) => {
+  const handleSaveEdit = async (id) => {
     setErrorMessage('');
 
     // Validaciones
@@ -114,27 +132,26 @@ const Configuration = () => {
       return;
     }
 
-    // Verificar si el email ya existe (excepto el actual)
-    if (analysts.some(analyst => analyst.id !== id && analyst.email.toLowerCase() === editForm.email.toLowerCase())) {
-      setErrorMessage('Este correo ya está registrado');
-      return;
+    setLoading(true);
+
+    const result = await analystService.update(
+      id,
+      editForm.firstName.trim(),
+      editForm.lastName.trim(),
+      editForm.email.trim().toLowerCase()
+    );
+
+    setLoading(false);
+
+    if (result.success) {
+      await loadAnalysts();
+      setEditingId(null);
+      setSuccessMessage('Analista actualizado exitosamente');
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } else {
+      setErrorMessage(result.error);
     }
-
-    const updatedAnalysts = analysts.map(analyst => {
-      if (analyst.id === id) {
-        return {
-          ...analyst,
-          firstName: editForm.firstName.trim(),
-          lastName: editForm.lastName.trim(),
-          email: editForm.email.trim().toLowerCase(),
-          fullName: `${editForm.firstName.trim()} ${editForm.lastName.trim()}`
-        };
-      }
-      return analyst;
-    });
-
-    setAnalysts(updatedAnalysts);
-    setEditingId(null);
   };
 
   const handleCancelEdit = () => {
@@ -144,7 +161,7 @@ const Configuration = () => {
 
   return (
     <div className="layout-container">
-      <Sidebar userRole="admin" onLogout={() => {}} />
+      <Sidebar userRole="admin" onLogout={onLogout} />
       <div className="configuration-container">
         <div className="configuration-content">
           <h1 className="page-title">Configuración de Analistas</h1>
@@ -153,7 +170,7 @@ const Configuration = () => {
           {showSuccessMessage && (
             <div className="success-message">
               <FaCheckCircle className="success-icon" />
-              Analista Registrado Exitosamente
+              {successMessage}
             </div>
           )}
 
@@ -179,6 +196,7 @@ const Configuration = () => {
                   placeholder="Nombre"
                   value={newAnalystFirstName}
                   onChange={(e) => setNewAnalystFirstName(e.target.value)}
+                  disabled={loading}
                 />
                 <input
                   type="text"
@@ -186,6 +204,7 @@ const Configuration = () => {
                   placeholder="Apellido"
                   value={newAnalystLastName}
                   onChange={(e) => setNewAnalystLastName(e.target.value)}
+                  disabled={loading}
                 />
                 <input
                   type="email"
@@ -194,17 +213,18 @@ const Configuration = () => {
                   value={newAnalystEmail}
                   onChange={(e) => setNewAnalystEmail(e.target.value)}
                   onKeyPress={(e) => {
-                    if (e.key === 'Enter' && newAnalystFirstName.trim() && newAnalystLastName.trim() && newAnalystEmail.trim()) {
+                    if (e.key === 'Enter' && !loading) {
                       handleAddAnalyst();
                     }
                   }}
+                  disabled={loading}
                 />
                 <button
                   className="add-analyst-btn"
                   onClick={handleAddAnalyst}
-                  disabled={!newAnalystFirstName.trim() || !newAnalystLastName.trim() || !newAnalystEmail.trim()}
+                  disabled={loading || !newAnalystFirstName.trim() || !newAnalystLastName.trim() || !newAnalystEmail.trim()}
                 >
-                  Agregar Analista
+                  {loading ? 'Agregando...' : 'Agregar Analista'}
                 </button>
               </div>
             </div>
@@ -218,7 +238,11 @@ const Configuration = () => {
               <span className="analysts-count">{analysts.length} analistas</span>
             </div>
             <div className="section-body">
-              {analysts.length === 0 ? (
+              {loading && analysts.length === 0 ? (
+                <div className="empty-state">
+                  <p>Cargando analistas...</p>
+                </div>
+              ) : analysts.length === 0 ? (
                 <div className="empty-state">
                   <p>No hay analistas registrados</p>
                 </div>
@@ -241,6 +265,7 @@ const Configuration = () => {
                               value={editForm.firstName}
                               onChange={(e) => setEditForm({...editForm, firstName: e.target.value})}
                               placeholder="Nombre"
+                              disabled={loading}
                             />
                             <input
                               type="text"
@@ -248,6 +273,7 @@ const Configuration = () => {
                               value={editForm.lastName}
                               onChange={(e) => setEditForm({...editForm, lastName: e.target.value})}
                               placeholder="Apellido"
+                              disabled={loading}
                             />
                           </div>
                           <input
@@ -256,6 +282,7 @@ const Configuration = () => {
                             value={editForm.email}
                             onChange={(e) => setEditForm({...editForm, email: e.target.value})}
                             placeholder="Email"
+                            disabled={loading}
                           />
                           <span className={`analyst-status ${analyst.status.toLowerCase()}`}>
                             {analyst.status}
@@ -265,6 +292,7 @@ const Configuration = () => {
                               className="action-btn save-btn" 
                               title="Guardar"
                               onClick={() => handleSaveEdit(analyst.id)}
+                              disabled={loading}
                             >
                               <FaSave />
                             </button>
@@ -272,6 +300,7 @@ const Configuration = () => {
                               className="action-btn cancel-btn" 
                               title="Cancelar"
                               onClick={handleCancelEdit}
+                              disabled={loading}
                             >
                               <FaTimes />
                             </button>
@@ -279,7 +308,7 @@ const Configuration = () => {
                         </>
                       ) : (
                         <>
-                          <span className="analyst-name">{analyst.fullName}</span>
+                          <span className="analyst-name">{analyst.full_name}</span>
                           <span className="analyst-email">{analyst.email}</span>
                           <span className={`analyst-status ${analyst.status.toLowerCase()}`}>
                             {analyst.status}
@@ -289,6 +318,7 @@ const Configuration = () => {
                               className="action-btn edit-btn" 
                               title="Editar"
                               onClick={() => handleEditClick(analyst)}
+                              disabled={loading}
                             >
                               <FaEdit />
                             </button>
@@ -296,6 +326,7 @@ const Configuration = () => {
                               className="action-btn delete-btn"
                               title="Eliminar"
                               onClick={() => handleDeleteAnalyst(analyst.id)}
+                              disabled={loading}
                             >
                               <FaTrash />
                             </button>

@@ -5,6 +5,20 @@ from datetime import datetime
 from config import settings
 import logging
 
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum
+from sqlalchemy.sql import func
+import enum
+
+# Agregar estos Enums ANTES de cualquier modelo
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"
+    ANALYST = "analyst"
+
+class UserStatus(str, enum.Enum):
+    ACTIVE = "Activo"
+    INACTIVE = "Inactivo"
+    PENDING = "Pendiente"
+
 # Configurar logging
 logger = logging.getLogger(__name__)
 
@@ -88,6 +102,42 @@ class ClientData(Base):
     
     def __repr__(self):
         return f"<ClientData(id={self.id}, cliente='{self.cliente}', factura='{self.factura}', venta={self.venta})>"
+
+# Modelo de Usuario/Analista
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=True)
+    role = Column(SQLEnum(UserRole), default=UserRole.ANALYST, nullable=False)
+    status = Column(SQLEnum(UserStatus), default=UserStatus.INACTIVE, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by = Column(Integer, nullable=True)
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    is_active = Column(Boolean, default=False)
+    email_verified = Column(Boolean, default=False)
+    
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "full_name": self.full_name,
+            "email": self.email,
+            "role": self.role.value,
+            "status": self.status.value,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_login": self.last_login.isoformat() if self.last_login else None
+        }
 
 class Clients(Base):
     __tablename__ = "clients"

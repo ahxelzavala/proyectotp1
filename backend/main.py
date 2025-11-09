@@ -19,6 +19,19 @@ from pathlib import Path
 from models import get_database, ClientData, AuthorizedEmail, create_tables, test_database_connection, migrate_add_new_columns
 from config import settings
 
+from auth import (
+    get_password_hash, 
+    verify_password, 
+    create_access_token, 
+    authenticate_user,
+    validate_email_domain,
+    get_current_user,
+    get_current_admin_user
+)
+from models import User, UserRole, UserStatus
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -3604,6 +3617,382 @@ async def get_client_type_analysis(db: Session = Depends(get_database)):
 @app.get("/debug/test-acquisition")
 async def debug_test_acquisition_endpoint(db: Session = Depends(get_database)):
     return await debug_test_acquisition(db)
+
+# AGREGAR ESTOS ENDPOINTS AL ARCHIVO main.py
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
+from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
+from auth import (
+    get_password_hash, 
+    verify_password, 
+    create_access_token, 
+    authenticate_user,
+    validate_email_domain,
+    get_current_user,
+    get_current_admin_user
+)
+from models import User, UserRole, UserStatus
+
+# ===== MODELOS PYDANTIC PARA USUARIOS =====
+
+class UserCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+
+class UserRegister(BaseModel):
+    email: EmailStr
+    password: str
+    name: str  # Nombre completo para compatibilidad con frontend
+
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: dict
+
+class UserResponse(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    full_name: str
+    email: str
+    role: str
+    status: str
+    is_active: bool
+    created_at: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
+
+# ===== ENDPOINTS DE AUTENTICACIÓN =====
+
+@app.post("/auth/login", response_model=Token)
+async def login(
+    login_data: UserLogin,
+    db: Session = Depends(get_database)
+):
+    """
+    Login de usuarios (admin y analistas)
+    """
+    try:
+        logger.info(f"🔐 Intento de login: {login_data.email}")
+        
+        # Verificar si es el admin hardcoded
+        if login_data.email == "admin@anders.com" and login_data.password == "contra123":
+            logger.info("✅ Login como ADMIN hardcoded")
+            
+            # Crear token para admin
+            access_token = create_access_token(
+                data={"sub": login_data.email, "role": "admin"}
+            )
+            
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": {
+                    "email": "admin@anders.com",
+                    "role": "admin",
+                    "full_name": "Administrador",
+                    "status": "Activo"
+                }
+            }
+        
+        # Autenticar usuario normal desde base de datos
+        user = authenticate_user(db, login_data.email, login_data.password)
+        
+        if not user:
+            logger.warning(f"❌ Login fallido: credenciales incorrectas para {login_data.email}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Email o contraseña incorrectos"
+            )
+        
+        # Verificar que el usuario esté activo
+        if user.status != UserStatus.ACTIVE:
+            logger.warning(f"❌ Login fallido: usuario {login_data.email} no está activo ({user.status})")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Tu cuenta está en estado: {user.status.value}. Contacta al administrador."
+            )
+        
+        # Actualizar última fecha de login
+        user.last_login = datetime.utcnow()
+        db.commit()
+        
+        # Crear token
+        access_token = create_access_token(
+            data={"sub": user.email, "role": user.role.value}
+        )
+        
+        logger.info(f"✅ Login exitoso: {user.email} ({user.role.value})")
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error en login: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error en el servidor: {str(e)}"
+        )
+
+@app.post("/auth/register")
+async def register_user(
+    register_data: UserRegister,
+    db: Session = Depends(get_database)
+):
+    """
+    Registro de nuevos analistas
+    Solo pueden registrarse si fueron previamente agregados por un admin
+    """
+    try:
+        logger.info(f"📝 Intento de registro: {register_data.email}")
+        
+        # Validar dominio de email
+        if not validate_email_domain(register_data.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Solo se permiten correos @anders.com"
+            )
+        
+        # Verificar que el usuario existe en la base de datos
+        user = db.query(User).filter(User.email == register_data.email.lower()).first()
+        
+        if not user:
+            logger.warning(f"❌ Email {register_data.email} no autorizado")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Este correo no está autorizado. Contacta al administrador."
+            )
+        
+        # Verificar que no tenga contraseña ya configurada
+        if user.hashed_password:
+            logger.warning(f"❌ Usuario {register_data.email} ya está registrado")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Este correo ya está registrado. Por favor, inicia sesión."
+            )
+        
+        # Validar contraseña
+        if len(register_data.password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La contraseña debe tener al menos 6 caracteres"
+            )
+        
+        # Actualizar usuario con contraseña
+        user.hashed_password = get_password_hash(register_data.password)
+        user.status = UserStatus.ACTIVE
+        user.is_active = True
+        user.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(user)
+        
+        logger.info(f"✅ Usuario registrado exitosamente: {user.email}")
+        
+        return {
+            "success": True,
+            "message": "Registro exitoso. Ahora puedes iniciar sesión.",
+            "user": user.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error en registro: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error en el servidor: {str(e)}"
+        )
+
+# ===== ENDPOINTS DE GESTIÓN DE ANALISTAS (SOLO ADMIN) =====
+
+@app.get("/users/analysts", response_model=List[UserResponse])
+async def get_analysts(
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_database)
+):
+    """
+    Obtener lista de todos los analistas (solo admin)
+    """
+    try:
+        analysts = db.query(User).filter(User.role == UserRole.ANALYST).all()
+        return [user.to_dict() for user in analysts]
+    except Exception as e:
+        logger.error(f"Error obteniendo analistas: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/users/analysts")
+async def create_analyst(
+    user_data: UserCreate,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_database)
+):
+    """
+    Crear un nuevo analista (solo admin)
+    """
+    try:
+        logger.info(f"👤 Admin {current_user.email} creando analista: {user_data.email}")
+        
+        # Validar dominio de email
+        if not validate_email_domain(user_data.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El correo debe terminar con @anders.com"
+            )
+        
+        # Verificar que el email no exista
+        existing_user = db.query(User).filter(User.email == user_data.email.lower()).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Este correo ya está registrado"
+            )
+        
+        # Crear nuevo analista
+        new_analyst = User(
+            first_name=user_data.first_name,
+            last_name=user_data.last_name,
+            email=user_data.email.lower(),
+            role=UserRole.ANALYST,
+            status=UserStatus.INACTIVE,
+            is_active=False,
+            created_by=current_user.id,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(new_analyst)
+        db.commit()
+        db.refresh(new_analyst)
+        
+        logger.info(f"✅ Analista creado: {new_analyst.email}")
+        
+        return {
+            "success": True,
+            "message": "Analista registrado exitosamente",
+            "analyst": new_analyst.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error creando analista: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/users/analysts/{analyst_id}")
+async def update_analyst(
+    analyst_id: int,
+    user_data: UserUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_database)
+):
+    """
+    Actualizar un analista (solo admin)
+    """
+    try:
+        analyst = db.query(User).filter(User.id == analyst_id).first()
+        
+        if not analyst:
+            raise HTTPException(status_code=404, detail="Analista no encontrado")
+        
+        # Actualizar campos
+        if user_data.first_name:
+            analyst.first_name = user_data.first_name
+        if user_data.last_name:
+            analyst.last_name = user_data.last_name
+        if user_data.email:
+            if not validate_email_domain(user_data.email):
+                raise HTTPException(
+                    status_code=400,
+                    detail="El correo debe terminar con @anders.com"
+                )
+            # Verificar que el nuevo email no exista
+            existing = db.query(User).filter(
+                User.email == user_data.email.lower(),
+                User.id != analyst_id
+            ).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Este correo ya está en uso")
+            
+            analyst.email = user_data.email.lower()
+        
+        analyst.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(analyst)
+        
+        logger.info(f"✅ Analista actualizado: {analyst.email}")
+        
+        return {
+            "success": True,
+            "message": "Analista actualizado exitosamente",
+            "analyst": analyst.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error actualizando analista: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/users/analysts/{analyst_id}")
+async def delete_analyst(
+    analyst_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_database)
+):
+    """
+    Eliminar un analista (solo admin)
+    """
+    try:
+        analyst = db.query(User).filter(User.id == analyst_id).first()
+        
+        if not analyst:
+            raise HTTPException(status_code=404, detail="Analista no encontrado")
+        
+        db.delete(analyst)
+        db.commit()
+        
+        logger.info(f"✅ Analista eliminado: {analyst.email}")
+        
+        return {
+            "success": True,
+            "message": "Analista eliminado exitosamente"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error eliminando analista: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/users/me")
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """
+    Obtener información del usuario actual
+    """
+    return current_user.to_dict()
 
 # Para desarrollo local
 # if __name__ == "__main__":
