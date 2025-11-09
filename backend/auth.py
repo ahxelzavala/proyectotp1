@@ -6,9 +6,12 @@ from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-
+import logging
 # IMPORTAR get_database desde models
-from models import get_database
+from models import User, UserRole, UserStatus, get_database
+
+# Configurar logging
+logger = logging.getLogger(__name__)
 
 # Configuración de seguridad
 SECRET_KEY = "tu_clave_secreta_super_segura_cambiar_en_produccion_12345"
