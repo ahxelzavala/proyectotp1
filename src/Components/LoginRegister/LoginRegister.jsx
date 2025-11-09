@@ -100,6 +100,13 @@ const LoginRegister = ({ onLoginSuccess }) => {
         return;
       }
 
+      // Validar formato de email
+      if (!registerEmail.includes('@')) {
+        setError('El correo debe ser un email válido (ejemplo: juan@anders.com)');
+        setLoading(false);
+        return;
+      }
+
       if (!registerEmail.toLowerCase().endsWith('@anders.com')) {
         setError('Solo se permiten correos @anders.com');
         setLoading(false);
@@ -124,7 +131,7 @@ const LoginRegister = ({ onLoginSuccess }) => {
         return;
       }
 
-      console.log('📝 Intentando registro con:', registerEmail);
+      console.log('📝 Intentando registro con:', { name: registerName, email: registerEmail });
 
       // Llamar al servicio de registro del backend
       const result = await authService.register(
@@ -176,7 +183,7 @@ const LoginRegister = ({ onLoginSuccess }) => {
           <div className="input-box">
             <input 
               type="email" 
-              placeholder='Introduce tu e-mail' 
+              placeholder='Email o contraseña incorrectos' 
               required 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -233,10 +240,11 @@ const LoginRegister = ({ onLoginSuccess }) => {
             <div className="success-message">{successMessage}</div>
           )}
           
+          {/* CAMPO 1: NOMBRE COMPLETO */}
           <div className="input-box">
             <input 
               type="text" 
-              placeholder='Nombre completo' 
+              placeholder='Nombre completo'
               required 
               value={registerName}
               onChange={(e) => setRegisterName(e.target.value)}
@@ -244,12 +252,14 @@ const LoginRegister = ({ onLoginSuccess }) => {
               autoComplete="name"
             />
             <FaUser className='icon' />
+            <div className="input-hint">Ejemplo: Juan Pérez</div>
           </div>
           
+          {/* CAMPO 2: EMAIL (CON AYUDA VISUAL) */}
           <div className="input-box">
             <input 
               type="email" 
-              placeholder='E-mail (@anders.com)' 
+              placeholder='Email (ej: juan@anders.com)'
               required 
               value={registerEmail}
               onChange={(e) => setRegisterEmail(e.target.value)}
@@ -257,8 +267,10 @@ const LoginRegister = ({ onLoginSuccess }) => {
               autoComplete="email"
             />
             <FaEnvelope className='icon' />
+            <div className="input-hint">⚠️ Debe ser un email válido @anders.com</div>
           </div>
           
+          {/* CAMPO 3: CONTRASEÑA */}
           <div className="input-box">
             <input 
               type="password" 
