@@ -3849,56 +3849,20 @@ async def get_analysts(
     db: Session = Depends(get_database)
 ):
     """
-    Obtener lista de todos los analistas (solo admin) - VERSIÓN MEJORADA
+    Obtener lista de todos los analistas (solo admin)
     """
     try:
-        logger.info(f"👤 Admin {current_user.email} solicitando lista de analistas")
-        
-        # Verificar que la tabla users existe
-        table_check = text("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public'
-                AND table_name = 'users'
-            )
-        """)
-        table_exists = db.execute(table_check).scalar()
-        
-        if not table_exists:
-            logger.error("❌ Tabla 'users' no existe")
-            return {
-                "success": False,
-                "message": "Tabla de usuarios no encontrada",
-                "analysts": []
-            }
-        
-        # Contar total de usuarios
-        total_users = db.query(User).count()
-        logger.info(f"📊 Total usuarios en DB: {total_users}")
+        logger.info(f"👤 Usuario {current_user.email if hasattr(current_user, 'email') else 'admin'} solicitando analistas")
         
         # Obtener analistas
         analysts = db.query(User).filter(User.role == UserRole.ANALYST).all()
         
         logger.info(f"✅ Encontrados {len(analysts)} analistas")
         
-        # Si no hay analistas, devolver array vacío pero exitoso
-        if not analysts:
-            return {
-                "success": True,
-                "message": "No hay analistas registrados aún",
-                "analysts": [],
-                "total_users": total_users
-            }
-        
-        # Convertir a diccionarios
+        # Convertir a dict
         analysts_data = []
         for analyst in analysts:
             try:
-                analyst_dict = analyst.to_dict()
-                analysts_data.append(analyst_dict)
-            except Exception as e:
-                logger.error(f"Error convirtiendo analista {analyst.id}: {str(e)}")
-                # Crear dict manualmente si to_dict() falla
                 analysts_data.append({
                     "id": analyst.id,
                     "first_name": analyst.first_name,
@@ -3911,24 +3875,21 @@ async def get_analysts(
                     "created_at": analyst.created_at.isoformat() if analyst.created_at else None,
                     "last_login": analyst.last_login.isoformat() if analyst.last_login else None
                 })
+            except Exception as e:
+                logger.error(f"Error convirtiendo analista {analyst.id}: {str(e)}")
         
         return {
             "success": True,
-            "message": f"Se encontraron {len(analysts_data)} analistas",
             "analysts": analysts_data,
-            "total_users": total_users
+            "total": len(analysts_data)
         }
         
     except Exception as e:
         logger.error(f"❌ Error obteniendo analistas: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        # Devolver respuesta de error pero sin romper el frontend
         return {
             "success": False,
-            "message": f"Error: {str(e)}",
-            "analysts": [],
-            "error_details": str(e)
+            "message": str(e),
+            "analysts": []
         }
 
 @app.put("/users/analysts/{analyst_id}")
