@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
 import './LoginRegister.css';
 import { FaUser, FaLock, FaEnvelope } from "react-icons/fa";
+import { authService } from '../../services/api';
 
 const LoginRegister = ({ onLoginSuccess }) => {
   const [action, setAction] = useState('');
+  
+  // Estados para Login
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  
+  // Estados para Registro
   const [registerName, setRegisterName] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
+  
+  // Estados para mensajes y loading
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const registerLink = (e) => {
     e.preventDefault();
@@ -27,157 +35,157 @@ const LoginRegister = ({ onLoginSuccess }) => {
     setSuccessMessage('');
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    // Usuarios administrativos predefinidos
-    const adminUsers = {
-      admin: {
-        email: 'admin@anders.com',
-        password: 'contra123',
-        role: 'admin'
-      }
-    };
-
-    // Verificar si es un usuario admin
-    const foundAdmin = Object.values(adminUsers).find(
-      user => user.email === email && user.password === password
-    );
-
-    if (foundAdmin) {
-      onLoginSuccess(foundAdmin.role);
-      return;
-    }
-
-    // Verificar si es un analista registrado
-    const analysts = JSON.parse(localStorage.getItem('analysts') || '[]');
-    const foundAnalyst = analysts.find(
-      analyst => analyst.email === email && analyst.status === 'Activo' && analyst.registeredPassword
-    );
-
-    if (foundAnalyst) {
-      // Verificar la contraseña guardada
-      const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-      const registeredUser = registeredUsers.find(user => user.email === email);
-      
-      if (registeredUser && registeredUser.password === password) {
-        onLoginSuccess('user');
+    try {
+      // Validaciones básicas
+      if (!email.trim()) {
+        setError('Por favor, ingrese su correo electrónico');
+        setLoading(false);
         return;
       }
-    }
 
-    setError('Credenciales incorrectas o usuario no registrado');
+      if (!password.trim()) {
+        setError('Por favor, ingrese su contraseña');
+        setLoading(false);
+        return;
+      }
+
+      console.log('🔐 Intentando login con:', email);
+
+      // Llamar al servicio de autenticación del backend
+      const result = await authService.login(email, password);
+
+      if (result.success) {
+        console.log('✅ Login exitoso:', result.data.user);
+        
+        // Limpiar formulario
+        setEmail('');
+        setPassword('');
+        
+        // Notificar al App.js del login exitoso
+        onLoginSuccess(result.data.user.role);
+      } else {
+        console.error('❌ Login fallido:', result.error);
+        setError(result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error inesperado en login:', error);
+      setError('Error de conexión con el servidor');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
+    setLoading(true);
 
-    // Validaciones
-    if (!registerName.trim()) {
-      setError('Por favor, ingrese su nombre de usuario');
-      return;
+    try {
+      // Validaciones
+      if (!registerName.trim()) {
+        setError('Por favor, ingrese su nombre completo');
+        setLoading(false);
+        return;
+      }
+
+      if (!registerEmail.trim()) {
+        setError('Por favor, ingrese su correo electrónico');
+        setLoading(false);
+        return;
+      }
+
+      if (!registerEmail.toLowerCase().endsWith('@anders.com')) {
+        setError('Solo se permiten correos @anders.com');
+        setLoading(false);
+        return;
+      }
+
+      if (!registerPassword.trim()) {
+        setError('Por favor, ingrese una contraseña');
+        setLoading(false);
+        return;
+      }
+
+      if (registerPassword.length < 6) {
+        setError('La contraseña debe tener al menos 6 caracteres');
+        setLoading(false);
+        return;
+      }
+
+      if (!acceptTerms) {
+        setError('Debe aceptar los términos y condiciones');
+        setLoading(false);
+        return;
+      }
+
+      console.log('📝 Intentando registro con:', registerEmail);
+
+      // Llamar al servicio de registro del backend
+      const result = await authService.register(
+        registerName,
+        registerEmail,
+        registerPassword
+      );
+
+      if (result.success) {
+        console.log('✅ Registro exitoso');
+        
+        // Mostrar mensaje de éxito
+        setSuccessMessage('¡Registro exitoso! Ahora puede iniciar sesión.');
+        
+        // Limpiar formulario
+        setRegisterName('');
+        setRegisterEmail('');
+        setRegisterPassword('');
+        setAcceptTerms(false);
+
+        // Cambiar a login después de 2 segundos
+        setTimeout(() => {
+          setAction('');
+          setSuccessMessage('');
+        }, 2000);
+      } else {
+        console.error('❌ Registro fallido:', result.error);
+        setError(result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error inesperado en registro:', error);
+      setError('Error de conexión con el servidor');
+    } finally {
+      setLoading(false);
     }
-
-    if (!registerEmail.trim()) {
-      setError('Por favor, ingrese su correo electrónico');
-      return;
-    }
-
-    if (!registerPassword.trim()) {
-      setError('Por favor, ingrese una contraseña');
-      return;
-    }
-
-    if (registerPassword.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-
-    if (!acceptTerms) {
-      setError('Debe aceptar los términos y condiciones');
-      return;
-    }
-
-    // Verificar que el email termine con @anders.com
-    if (!registerEmail.toLowerCase().endsWith('@anders.com')) {
-      setError('Solo se permiten correos @anders.com');
-      return;
-    }
-
-    // Verificar que el analista esté registrado en la configuración
-    const analysts = JSON.parse(localStorage.getItem('analysts') || '[]');
-    const analystIndex = analysts.findIndex(
-      analyst => analyst.email.toLowerCase() === registerEmail.toLowerCase()
-    );
-
-    if (analystIndex === -1) {
-      setError('Este correo no está autorizado. Contacte al administrador.');
-      return;
-    }
-
-    // Verificar si ya está registrado
-    const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-    const existingUser = registeredUsers.find(
-      user => user.email.toLowerCase() === registerEmail.toLowerCase()
-    );
-
-    if (existingUser) {
-      setError('Este correo ya está registrado. Por favor, inicie sesión.');
-      return;
-    }
-
-    // Registrar el nuevo usuario
-    const newUser = {
-      name: registerName.trim(),
-      email: registerEmail.toLowerCase(),
-      password: registerPassword,
-      registeredAt: new Date().toISOString()
-    };
-
-    registeredUsers.push(newUser);
-    localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
-
-    // Actualizar el estado del analista a "Activo"
-    analysts[analystIndex].status = 'Activo';
-    analysts[analystIndex].registeredPassword = true;
-    localStorage.setItem('analysts', JSON.stringify(analysts));
-
-    // Mostrar mensaje de éxito
-    setSuccessMessage('¡Registro exitoso! Ahora puede iniciar sesión.');
-    
-    // Limpiar formulario
-    setRegisterName('');
-    setRegisterEmail('');
-    setRegisterPassword('');
-    setAcceptTerms(false);
-
-    // Cambiar a login después de 2 segundos
-    setTimeout(() => {
-      setAction('');
-      setSuccessMessage('');
-    }, 2000);
   };
 
   return (
     <div className={`wrapper ${action}`}>
-      {/* -- Login -- */}
+      {/* Login Form */}
       <div className="form-box login">
         <form onSubmit={handleLogin}>
           <h1>ANDERS</h1>
-          {error && !action && <div className="error-message">{error}</div>}
+          
+          {error && !action && (
+            <div className="error-message">{error}</div>
+          )}
+          
           <div className="input-box">
             <input 
-              type="text" 
+              type="email" 
               placeholder='Introduce tu e-mail' 
               required 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              autoComplete="email"
             />
             <FaUser className='icon' />
           </div>
+          
           <div className="input-box">
             <input 
               type="password" 
@@ -185,9 +193,12 @@ const LoginRegister = ({ onLoginSuccess }) => {
               required 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              autoComplete="current-password"
             />
             <FaLock className='icon' />
           </div>
+          
           <div className="remember-forgot">
             <label>
               <input type="checkbox" />
@@ -195,7 +206,11 @@ const LoginRegister = ({ onLoginSuccess }) => {
             </label>
             <a href="#">¿Has olvidado tu contraseña?</a>
           </div>
-          <button type="submit">Iniciar Sesión</button>
+          
+          <button type="submit" disabled={loading}>
+            {loading ? 'Iniciando...' : 'Iniciar Sesión'}
+          </button>
+          
           <div className="register-link">
             <p>
               ¿No tienes una cuenta?{' '}
@@ -205,53 +220,74 @@ const LoginRegister = ({ onLoginSuccess }) => {
         </form>
       </div>
 
-      {/* -- Register -- */}
+      {/* Register Form */}
       <div className="form-box register">
         <form onSubmit={handleRegister}>
           <h1>Registro</h1>
-          {error && action && <div className="error-message">{error}</div>}
-          {successMessage && <div className="success-message">{successMessage}</div>}
+          
+          {error && action && (
+            <div className="error-message">{error}</div>
+          )}
+          
+          {successMessage && (
+            <div className="success-message">{successMessage}</div>
+          )}
+          
           <div className="input-box">
             <input 
               type="text" 
-              placeholder='Nombre de usuario' 
+              placeholder='Nombre completo' 
               required 
               value={registerName}
               onChange={(e) => setRegisterName(e.target.value)}
+              disabled={loading}
+              autoComplete="name"
             />
             <FaUser className='icon' />
           </div>
+          
           <div className="input-box">
             <input 
               type="email" 
-              placeholder='E-mail' 
+              placeholder='E-mail (@anders.com)' 
               required 
               value={registerEmail}
               onChange={(e) => setRegisterEmail(e.target.value)}
+              disabled={loading}
+              autoComplete="email"
             />
             <FaEnvelope className='icon' />
           </div>
+          
           <div className="input-box">
             <input 
               type="password" 
-              placeholder='Contraseña' 
+              placeholder='Contraseña (mín. 6 caracteres)' 
               required 
               value={registerPassword}
               onChange={(e) => setRegisterPassword(e.target.value)}
+              disabled={loading}
+              autoComplete="new-password"
             />
             <FaLock className='icon' />
           </div>
+          
           <div className="remember-forgot">
             <label>
               <input 
                 type="checkbox" 
                 checked={acceptTerms}
                 onChange={(e) => setAcceptTerms(e.target.checked)}
+                disabled={loading}
               />
               Acepto los términos y condiciones
             </label>
           </div>
-          <button type="submit">Registrar</button>
+          
+          <button type="submit" disabled={loading}>
+            {loading ? 'Registrando...' : 'Registrar'}
+          </button>
+          
           <div className="register-link">
             <p>
               ¿Ya tienes una cuenta?{' '}
