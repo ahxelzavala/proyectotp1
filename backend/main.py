@@ -3842,63 +3842,93 @@ async def get_analysts(
         logger.error(f"Error obteniendo analistas: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/users/analysts")
-async def create_analyst(
-    user_data: UserCreate,
+@app.get("/users/analysts")
+async def get_analysts(
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_database)
 ):
     """
-    Crear un nuevo analista (solo admin)
+    Obtener lista de todos los analistas (solo admin) - VERSIÓN MEJORADA
     """
     try:
-        logger.info(f"👤 Admin {current_user.email} creando analista: {user_data.email}")
+        logger.info(f"👤 Admin {current_user.email} solicitando lista de analistas")
         
-        # Validar dominio de email
-        if not validate_email_domain(user_data.email):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El correo debe terminar con @anders.com"
+        # Verificar que la tabla users existe
+        table_check = text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public'
+                AND table_name = 'users'
             )
+        """)
+        table_exists = db.execute(table_check).scalar()
         
-        # Verificar que el email no exista
-        existing_user = db.query(User).filter(User.email == user_data.email.lower()).first()
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Este correo ya está registrado"
-            )
+        if not table_exists:
+            logger.error("❌ Tabla 'users' no existe")
+            return {
+                "success": False,
+                "message": "Tabla de usuarios no encontrada",
+                "analysts": []
+            }
         
-        # Crear nuevo analista
-        new_analyst = User(
-            first_name=user_data.first_name,
-            last_name=user_data.last_name,
-            email=user_data.email.lower(),
-            role=UserRole.ANALYST,
-            status=UserStatus.INACTIVE,
-            is_active=False,
-            created_by=current_user.id,
-            created_at=datetime.utcnow()
-        )
+        # Contar total de usuarios
+        total_users = db.query(User).count()
+        logger.info(f"📊 Total usuarios en DB: {total_users}")
         
-        db.add(new_analyst)
-        db.commit()
-        db.refresh(new_analyst)
+        # Obtener analistas
+        analysts = db.query(User).filter(User.role == UserRole.ANALYST).all()
         
-        logger.info(f"✅ Analista creado: {new_analyst.email}")
+        logger.info(f"✅ Encontrados {len(analysts)} analistas")
+        
+        # Si no hay analistas, devolver array vacío pero exitoso
+        if not analysts:
+            return {
+                "success": True,
+                "message": "No hay analistas registrados aún",
+                "analysts": [],
+                "total_users": total_users
+            }
+        
+        # Convertir a diccionarios
+        analysts_data = []
+        for analyst in analysts:
+            try:
+                analyst_dict = analyst.to_dict()
+                analysts_data.append(analyst_dict)
+            except Exception as e:
+                logger.error(f"Error convirtiendo analista {analyst.id}: {str(e)}")
+                # Crear dict manualmente si to_dict() falla
+                analysts_data.append({
+                    "id": analyst.id,
+                    "first_name": analyst.first_name,
+                    "last_name": analyst.last_name,
+                    "full_name": f"{analyst.first_name} {analyst.last_name}",
+                    "email": analyst.email,
+                    "role": analyst.role.value if analyst.role else "analyst",
+                    "status": analyst.status.value if analyst.status else "Inactivo",
+                    "is_active": analyst.is_active,
+                    "created_at": analyst.created_at.isoformat() if analyst.created_at else None,
+                    "last_login": analyst.last_login.isoformat() if analyst.last_login else None
+                })
         
         return {
             "success": True,
-            "message": "Analista registrado exitosamente",
-            "analyst": new_analyst.to_dict()
+            "message": f"Se encontraron {len(analysts_data)} analistas",
+            "analysts": analysts_data,
+            "total_users": total_users
         }
         
-    except HTTPException:
-        raise
     except Exception as e:
-        db.rollback()
-        logger.error(f"❌ Error creando analista: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Error obteniendo analistas: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Devolver respuesta de error pero sin romper el frontend
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "analysts": [],
+            "error_details": str(e)
+        }
 
 @app.put("/users/analysts/{analyst_id}")
 async def update_analyst(
