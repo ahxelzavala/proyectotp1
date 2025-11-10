@@ -44,20 +44,29 @@ export const authService = {
     }
   },
 
-  register: async (email, password, name) => {
+  // ✅ CORREGIDO - Orden correcto: name, email, password
+  register: async (name, email, password) => {
     try {
-      console.log('📝 Intentando registro:', email);
+      console.log('📝 Intentando registro...');
+      console.log('   Nombre:', name);
+      console.log('   Email:', email);
+      console.log('   Password length:', password.length);
       
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ 
+          name: name.trim(),              // ✅ Nombre completo
+          email: email.trim().toLowerCase(), // ✅ Email
+          password: password              // ✅ Contraseña
+        }),
       });
 
       if (!response.ok) {
         const error = await response.json();
+        console.error('❌ Error del servidor:', error);
         throw new Error(error.detail || 'Error en registro');
       }
 
