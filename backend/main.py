@@ -3757,6 +3757,8 @@ async def login(
             detail=f"Error en el servidor: {str(e)}"
         )
 
+
+        
 @app.post("/auth/register")
 async def register_user(
     register_data: UserRegister,
@@ -3810,7 +3812,11 @@ async def register_user(
                 detail="La contraseña no puede tener más de 50 caracteres"
             )
         
-        # ✅ NO VALIDAR acceptTerms AQUÍ - eso se valida en el frontend
+        if not acceptTerms:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Debe aceptar los términos y condiciones"
+            )
         
         # Actualizar usuario con contraseña hasheada
         logger.info(f"🔐 Hasheando contraseña para {user.email}")
@@ -3840,6 +3846,7 @@ async def register_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error en el servidor: {str(e)}"
         )
+
 # ===== ENDPOINTS DE GESTIÓN DE ANALISTAS (SOLO ADMIN) =====
 
 
