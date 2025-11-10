@@ -183,7 +183,7 @@ const LoginRegister = ({ onLoginSuccess }) => {
           <div className="input-box">
             <input 
               type="email" 
-              placeholder='Email o contraseña incorrectos' 
+              placeholder='Email' 
               required 
               value={email}
               onChange={(e) => setEmail(e.target.value)}

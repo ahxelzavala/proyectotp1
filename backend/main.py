@@ -3650,8 +3650,8 @@ class UserCreate(BaseModel):
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
-    name: str  # Nombre completo para compatibilidad con frontend
-
+    name: str  # ✅ Nombre completo
+    
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
