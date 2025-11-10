@@ -3651,7 +3651,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     name: str  # ✅ Nombre completo
-    
+
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -3756,7 +3756,6 @@ async def login(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error en el servidor: {str(e)}"
         )
-
 @app.post("/auth/register")
 async def register_user(
     register_data: UserRegister,
@@ -3768,6 +3767,7 @@ async def register_user(
     """
     try:
         logger.info(f"📝 Intento de registro: {register_data.email}")
+        logger.info(f"   Password length recibido: {len(register_data.password)}")
         
         # Validar dominio de email
         if not validate_email_domain(register_data.email):
@@ -3795,14 +3795,29 @@ async def register_user(
             )
         
         # Validar contraseña
-        if len(register_data.password) < 6:
+        password_str = str(register_data.password).strip()
+        
+        if len(password_str) < 6:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="La contraseña debe tener al menos 6 caracteres"
             )
         
-        # Actualizar usuario con contraseña
-        user.hashed_password = get_password_hash(register_data.password)
+        if len(password_str) > 50:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La contraseña no puede tener más de 50 caracteres"
+            )
+        
+        if not acceptTerms:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Debe aceptar los términos y condiciones"
+            )
+        
+        # Actualizar usuario con contraseña hasheada
+        logger.info(f"🔐 Hasheando contraseña para {user.email}")
+        user.hashed_password = get_password_hash(password_str)
         user.status = UserStatus.ACTIVE
         user.is_active = True
         user.updated_at = datetime.utcnow()
@@ -3823,6 +3838,7 @@ async def register_user(
     except Exception as e:
         db.rollback()
         logger.error(f"❌ Error en registro: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error en el servidor: {str(e)}"

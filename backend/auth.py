@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import logging
+
 # IMPORTAR get_database desde models
 from models import User, UserRole, UserStatus, get_database
 
@@ -26,18 +27,34 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verificar que la contraseña coincida con el hash"""
-    # Aplicar el mismo truncado que al hashear
-    password_bytes = plain_password.encode('utf-8')[:72]
-    password_truncated = password_bytes.decode('utf-8', errors='ignore')
-    return pwd_context.verify(password_truncated, hashed_password)
+    try:
+        # Limpiar y truncar la contraseña si es necesaria
+        clean_password = str(plain_password).strip()
+        # Bcrypt tiene límite de 72 bytes
+        password_bytes = clean_password.encode('utf-8')[:72]
+        safe_password = password_bytes.decode('utf-8', errors='ignore')
+        return pwd_context.verify(safe_password, hashed_password)
+    except Exception as e:
+        logger.error(f"Error en verify_password: {e}")
+        return False
 
 def get_password_hash(password: str) -> str:
-    """Hashear una contraseña (truncando a 72 bytes si es necesario)"""
-    # Bcrypt tiene límite de 72 bytes
-    # Truncar la contraseña si es muy larga
-    password_bytes = password.encode('utf-8')[:72]
-    password_truncated = password_bytes.decode('utf-8', errors='ignore')
-    return pwd_context.hash(password_truncated)
+    """Hashear una contraseña de manera segura"""
+    try:
+        # Limpiar y truncar la contraseña
+        clean_password = str(password).strip()
+        # Bcrypt tiene límite de 72 bytes
+        password_bytes = clean_password.encode('utf-8')[:72]
+        safe_password = password_bytes.decode('utf-8', errors='ignore')
+        
+        logger.info(f"🔐 Hasheando contraseña de longitud: {len(safe_password)}")
+        return pwd_context.hash(safe_password)
+    except Exception as e:
+        logger.error(f"❌ Error hasheando contraseña: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error procesando la contraseña"
+        )
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Crear un token JWT"""
