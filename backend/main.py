@@ -2620,7 +2620,7 @@ async def debug_test_acquisition(db: Session = Depends(get_database)):
 
 @app.get("/products/analytics/top_products_6")
 async def get_top_products_6(db: Session = Depends(get_database)):
-    """Top 6 productos"""
+    """Top 6 productos - SIN SessionLocal"""
     try:
         logger.info("🏆 [TOP6] Obteniendo top 6 productos...")
         
@@ -2654,19 +2654,17 @@ async def get_top_products_6(db: Session = Depends(get_database)):
         
         logger.info(f"✅ [TOP6] {len(products)} productos obtenidos")
         
-        # ✅ DEVOLVER OBJETO CON ESTRUCTURA CORRECTA
         return {
             "success": True,
-            "data": products,
-            "total": len(products)
+            "products": products
         }
         
     except Exception as e:
         logger.error(f"❌ [TOP6] Error: {str(e)}")
         return {
             "success": False,
-            "message": str(e),
-            "data": []
+            "products": [],
+            "error": str(e)
         }
 
 
@@ -2676,31 +2674,46 @@ async def get_products_comparative_bars(
     limit: int = 10,
     db: Session = Depends(get_database)
 ):
-    """Top productos por ventas"""
+    """
+    Top productos por ventas - POSTGRESQL COMPATIBLE
+    Solución a los errores:
+    1. CAST a TEXT antes de usar operador regex (~)
+    2. CAST explícito en ROUND
+    3. Devuelve array directo para el frontend
+    """
     try:
         logger.info(f"🔍 [COMPARATIVE] Obteniendo top {limit} productos...")
         
+        # Verificar datos
         total_check = db.execute(text("SELECT COUNT(*) FROM client_data")).scalar()
-        if total_check == 0:
-            return {
-                "success": False,
-                "message": "No hay datos",
-                "data": []
-            }
+        logger.info(f"📊 [COMPARATIVE] Total registros: {total_check}")
         
+        if total_check == 0:
+            logger.warning("⚠️ [COMPARATIVE] No hay datos")
+            return []
+        
+        # Query CORREGIDA para PostgreSQL - Sin usar ~ en NUMERIC
         query = text("""
             SELECT 
                 COALESCE(articulo, 'Sin nombre') as producto,
                 COALESCE(categoria, 'Sin categoría') as categoria,
                 COALESCE(proveedor, 'Sin proveedor') as proveedor,
+                
+                -- Ventas: sumar directamente sin validación regex
                 ROUND(CAST(COALESCE(SUM(venta), 0) AS NUMERIC), 2) as total_ventas,
+                
+                -- Margen: sumar directamente
                 ROUND(CAST(COALESCE(SUM(mb), 0) AS NUMERIC), 2) as total_margen,
+                
+                -- Métricas adicionales
                 COUNT(DISTINCT factura) as num_facturas,
                 COUNT(DISTINCT cliente) as num_clientes,
                 ROUND(CAST(COALESCE(SUM(cantidad), 0) AS NUMERIC), 2) as cantidad_total
+                
             FROM client_data
             WHERE articulo IS NOT NULL 
             AND TRIM(articulo) != ''
+            AND articulo != 'N/A'
             AND venta IS NOT NULL
             AND venta > 0
             GROUP BY articulo, categoria, proveedor
@@ -2711,16 +2724,16 @@ async def get_products_comparative_bars(
         
         result = db.execute(query, {"limit_param": limit}).fetchall()
         
-        if not result:
-            return {
-                "success": False,
-                "message": "Sin resultados",
-                "data": []
-            }
+        logger.info(f"📊 [COMPARATIVE] Query ejecutada: {len(result)} resultados")
         
+        if not result or len(result) == 0:
+            logger.warning("⚠️ [COMPARATIVE] Sin resultados")
+            return []
+        
+        # Formatear datos
         data = []
-        for row in result:
-            data.append({
+        for i, row in enumerate(result):
+            item = {
                 "producto": row.producto,
                 "categoria": row.categoria,
                 "proveedor": row.proveedor,
@@ -2729,25 +2742,24 @@ async def get_products_comparative_bars(
                 "num_facturas": int(row.num_facturas or 0),
                 "num_clientes": int(row.num_clientes or 0),
                 "cantidad_total": float(row.cantidad_total or 0)
-            })
+            }
+            data.append(item)
+            
+            # Log primeros 3
+            if i < 3:
+                logger.info(f"  ✅ {i+1}. {row.producto}: S/ {row.total_ventas:,.2f}")
         
         logger.info(f"✅ [COMPARATIVE] Retornando {len(data)} productos")
         
-        # ✅ DEVOLVER OBJETO CON ESTRUCTURA CORRECTA
-        return {
-            "success": True,
-            "data": data,
-            "total": len(data)
-        }
+        # RETORNAR ARRAY DIRECTO
+        return data
         
     except Exception as e:
         logger.error(f"❌ [COMPARATIVE] Error: {str(e)}")
-        return {
-            "success": False,
-            "message": str(e),
-            "data": []
-        }
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return []
 
+        # 2. Modificar trend-lines existente:
 
 
 # ===== ENDPOINT 2: TREND LINES (CORREGIDO) =====
@@ -2756,11 +2768,13 @@ async def get_products_trend_lines(
     top_products: int = 6,
     db: Session = Depends(get_database)
 ):
-    """Tendencias de ventas mensuales"""
+    """
+    Tendencias de ventas mensuales - POSTGRESQL COMPATIBLE
+    """
     try:
         logger.info(f"📈 [TREND] Obteniendo tendencias para top {top_products}...")
         
-        # Obtener productos más vendidos
+        # 1. Obtener los productos más vendidos
         top_query = text("""
             SELECT 
                 COALESCE(articulo, 'Sin nombre') as producto,
@@ -2779,16 +2793,14 @@ async def get_products_trend_lines(
         
         top_result = db.execute(top_query, {"limit_param": top_products}).fetchall()
         
-        if not top_result:
-            return {
-                "success": False,
-                "message": "No se encontraron productos",
-                "data": []
-            }
+        if not top_result or len(top_result) == 0:
+            logger.warning("⚠️ [TREND] No se encontraron productos")
+            return []
         
         top_product_names = [row.producto for row in top_result]
+        logger.info(f"📋 [TREND] Top productos: {top_product_names[:3]}...")
         
-        # Obtener tendencias mensuales
+        # 2. Obtener tendencias mensuales para estos productos
         trend_query = text("""
             SELECT 
                 COALESCE(articulo, 'Sin nombre') as producto,
@@ -2812,13 +2824,13 @@ async def get_products_trend_lines(
         
         result = db.execute(trend_query, {"product_names": top_product_names}).fetchall()
         
-        if not result:
-            return {
-                "success": False,
-                "message": "Sin datos de tendencia",
-                "data": []
-            }
+        logger.info(f"📊 [TREND] Query ejecutada: {len(result)} registros")
         
+        if not result or len(result) == 0:
+            logger.warning("⚠️ [TREND] Sin datos de tendencia")
+            return []
+        
+        # 3. Formatear datos
         data = []
         for row in result:
             data.append({
@@ -2828,22 +2840,19 @@ async def get_products_trend_lines(
                 "facturas_mes": int(row.facturas_mes or 0)
             })
         
-        logger.info(f"✅ [TREND] Retornando {len(data)} registros")
+        # Log de muestra
+        if len(data) > 0:
+            logger.info(f"  ✅ Ejemplo: {data[0]['producto']} en {data[0]['mes']}: S/ {data[0]['ventas_mes']:,.2f}")
         
-        # ✅ DEVOLVER OBJETO CON ESTRUCTURA CORRECTA
-        return {
-            "success": True,
-            "data": data,
-            "total": len(data)
-        }
+        logger.info(f"✅ [TREND] Retornando {len(data)} registros de tendencia")
+        
+        # RETORNAR ARRAY DIRECTO
+        return data
         
     except Exception as e:
         logger.error(f"❌ [TREND] Error: {str(e)}")
-        return {
-            "success": False,
-            "message": str(e),
-            "data": []
-        }
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return []
 
 
 
@@ -3747,9 +3756,6 @@ async def login(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error en el servidor: {str(e)}"
         )
-
-
-        
 @app.post("/auth/register")
 async def register_user(
     register_data: UserRegister,
