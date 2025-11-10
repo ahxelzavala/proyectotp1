@@ -3756,9 +3756,6 @@ async def login(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error en el servidor: {str(e)}"
         )
-
-
-        
 @app.post("/auth/register")
 async def register_user(
     register_data: UserRegister,
